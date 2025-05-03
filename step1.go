@@ -17,10 +17,10 @@ type StepOneResponse struct {
 	Prime  bool   `json:"prime"`
 }
 
-func handle_step_one(log zerolog.Logger, conn net.Conn, request []byte) bool {
+func handle_step_one(log zerolog.Logger, conn net.Conn, request string) bool {
 	log.Debug().Str("request", string(request)).Msg("Got message from client")
 	var requestData StepOneRequest
-	if err := json.Unmarshal(request, &requestData); err != nil {
+	if err := json.Unmarshal([]byte(request), &requestData); err != nil {
 		log.Error().Err(err).Msg("Could not parse JSON request")
 		return false
 	}
