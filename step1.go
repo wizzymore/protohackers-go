@@ -7,11 +7,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type StepOneRequest struct {
-	Method *string `json:"method"`
-	Number *int    `json:"number"`
-}
-
 type StepOneResponse struct {
 	Method string `json:"method"`
 	Prime  bool   `json:"prime"`
@@ -19,21 +14,30 @@ type StepOneResponse struct {
 
 func handle_step_one(log zerolog.Logger, conn net.Conn, request []byte) bool {
 	log.Debug().Str("request", string(request)).Msg("Got message from client")
-	var requestData StepOneRequest
+	var requestData map[string]interface{}
 	if err := json.Unmarshal(request, &requestData); err != nil {
 		log.Error().Err(err).Msg("Could not parse JSON request")
 		return false
 	}
-	if requestData.Method == nil || *requestData.Method != "isPrime" || requestData.Number == nil {
+	if !hasKey(requestData, "method") || requestData["method"] != "isPrime" || !hasKey(requestData, "number") {
 		return false
 	}
 	var responseData StepOneResponse
 	responseData.Method = "isPrime"
-	responseData.Prime = isPrime(*requestData.Number)
+	if number, ok := requestData["number"].(float64); ok && number == float64(int(number)) {
+		responseData.Prime = isPrime(int(number))
+	} else {
+		responseData.Prime = false
+	}
 	data, _ := json.Marshal(responseData)
 	data = append(data, '\n')
 	conn.Write(data)
 	return true
+}
+
+func hasKey[T comparable, V any](m map[T]V, key T) bool {
+	_, ok := m[key]
+	return ok
 }
 
 func isPrime(n int) bool {
