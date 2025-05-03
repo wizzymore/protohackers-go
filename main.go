@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/rs/zerolog"
@@ -82,6 +83,7 @@ func step_one(conn net.Conn) {
 	for {
 		buf := make([]byte, 1024)
 		n, err := conn.Read(buf)
+		log.Info().Msgf("Got new buffer %s", strings.ReplaceAll(string(buf), "\n", "\\n"))
 		if err != nil {
 			if err == io.EOF {
 				log.Info().Msg("Client closed the connection")
