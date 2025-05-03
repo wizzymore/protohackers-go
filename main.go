@@ -91,7 +91,7 @@ func step_one(conn net.Conn) {
 			return
 		}
 
-		for request := range strings.SplitSeq(string(buf[:n]), "\n") {
+		for request := range strings.SplitSeq(string(buf[:n-1]), "\n") {
 			if !handle_step_one(log, conn, request) {
 				conn.Write([]byte("bye, bye\n"))
 				return
