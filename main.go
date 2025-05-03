@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/rs/zerolog"
@@ -79,6 +78,7 @@ func step_one(conn net.Conn) {
 		conn.Close()
 	}()
 
+	left := []byte{}
 	for {
 		buf := make([]byte, 1024)
 		n, err := conn.Read(buf)
@@ -91,10 +91,18 @@ func step_one(conn net.Conn) {
 			return
 		}
 
-		for request := range strings.SplitSeq(string(buf[:n-1]), "\n") {
-			if !handle_step_one(log, conn, request) {
-				conn.Write([]byte("bye, bye\n"))
-				return
+		start := 0
+		for i := range buf[:n] {
+			if buf[i] == '\n' {
+				left = append(left, buf[start:i]...)
+				if !handle_step_one(log, conn, left) {
+					conn.Write([]byte("bye, bye\n"))
+					return
+				}
+				left = []byte{}
+				start = i + 1
+			} else if i == n-1 {
+				left = buf[start:n]
 			}
 		}
 	}
