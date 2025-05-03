@@ -24,11 +24,11 @@ func handle_step_one(log zerolog.Logger, conn net.Conn, request []byte) bool {
 		log.Error().Err(err).Msg("Could not parse JSON request")
 		return false
 	}
-	if requestData.Method == nil || *requestData.Method != "prime" || requestData.Number == nil {
+	if requestData.Method == nil || *requestData.Method != "isPrime" || requestData.Number == nil {
 		return false
 	}
 	var responseData StepOneResponse
-	responseData.Method = "prime"
+	responseData.Method = "isPrime"
 	responseData.Prime = isPrime(*requestData.Number)
 	data, _ := json.Marshal(responseData)
 	data = append(data, '\n')
