@@ -104,7 +104,7 @@ func step_one(conn net.Conn) {
 				left = []byte{}
 				start = i + 1
 			} else if i == n-1 {
-				left = buf[start:n]
+				left = append(left, buf[start:n]...)
 			}
 		}
 	}
