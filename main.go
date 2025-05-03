@@ -18,7 +18,7 @@ func init() {
 }
 
 func main() {
-	s, err := NewServer(step_zero)
+	s, err := NewServer(step_one)
 	if err != nil {
 		log.Error().Err(err).Msg("Error creating server")
 		return
@@ -68,5 +68,39 @@ func step_zero(conn net.Conn) {
 		}
 
 		conn.Write(buf[:n])
+	}
+}
+
+func step_one(conn net.Conn) {
+	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
+	defer func() {
+		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
+		conn.Close()
+	}()
+
+	var request []byte
+	for {
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				log.Info().Msg("Client closed the connection")
+				return
+			}
+			log.Err(err).Msg("Client read error")
+			return
+		}
+
+		if buf[n-1] == '\n' {
+			request = append(request, buf[:n-1]...)
+
+			if !handle_step_one(log, conn, request) {
+				conn.Write([]byte("bye, bye\n"))
+				return
+			}
+			request = []byte{}
+		} else {
+			request = append(request, buf[:n]...)
+		}
 	}
 }
