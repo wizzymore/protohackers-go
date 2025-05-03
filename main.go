@@ -81,7 +81,7 @@ func step_one(conn net.Conn) {
 
 	for {
 		buf := make([]byte, 1024)
-		_, err := conn.Read(buf)
+		n, err := conn.Read(buf)
 		if err != nil {
 			if err == io.EOF {
 				log.Info().Msg("Client closed the connection")
@@ -91,7 +91,7 @@ func step_one(conn net.Conn) {
 			return
 		}
 
-		for request := range strings.SplitSeq(string(buf), "\n") {
+		for request := range strings.SplitSeq(string(buf[:n]), "\n") {
 			if !handle_step_one(log, conn, request) {
 				conn.Write([]byte("bye, bye\n"))
 				return
