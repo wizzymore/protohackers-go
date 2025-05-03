@@ -19,7 +19,7 @@ func handle_step_one(log zerolog.Logger, conn net.Conn, request []byte) bool {
 		log.Error().Err(err).Msg("Could not parse JSON request")
 		return false
 	}
-	if !hasKey(requestData, "method") || requestData["method"] != "isPrime" || !hasKey(requestData, "number") {
+	if !hasKey(requestData, "method") || requestData["method"] != "isPrime" || !hasKey(requestData, "number") || !isFloat64(requestData["number"]) {
 		return false
 	}
 	var responseData StepOneResponse
@@ -37,6 +37,11 @@ func handle_step_one(log zerolog.Logger, conn net.Conn, request []byte) bool {
 
 func hasKey[T comparable, V any](m map[T]V, key T) bool {
 	_, ok := m[key]
+	return ok
+}
+
+func isFloat64(n any) bool {
+	_, ok := n.(float64)
 	return ok
 }
 
