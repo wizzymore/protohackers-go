@@ -69,6 +69,9 @@ func (chatServer *ChatServer) runChatServer() {
 			log.Debug().Str("ip", message.socket.RemoteAddr().String()).Msg("Client disconnected")
 			session := chatServer.sessions[message.socket]
 			delete(chatServer.sessions, message.socket)
+			if !session.IsConnected() {
+				break
+			}
 			for sess := range maps.Values(chatServer.sessions) {
 				if sess.IsConnected() {
 					sess.writeLine(fmt.Sprintf("* %s has left the room", session.username))
