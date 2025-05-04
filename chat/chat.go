@@ -75,6 +75,10 @@ func (chatServer *ChatServer) runChatServer() {
 		case SentMessage:
 			session := chatServer.sessions[message.socket]
 			if session.username == "" {
+				if message.text == "" {
+					session.socket.Close()
+					break
+				}
 				{
 					uCounter, ok := usernameMaps[message.text]
 					if !ok {
@@ -98,6 +102,10 @@ func (chatServer *ChatServer) runChatServer() {
 				} else {
 					session.writeLine("* The room is currently empty")
 				}
+				break
+			}
+
+			if message.text == "" {
 				break
 			}
 
@@ -145,10 +153,6 @@ func (cs *ChatServer) HandleClient(conn net.Conn) {
 				continue
 			}
 			text, _ := buffer.ReadString('\n')
-			// Just pressed enter
-			if len(text) == 1 {
-				continue
-			}
 			cs.messages <- SentMessage{
 				socket: conn,
 				text:   text[:len(text)-1],
