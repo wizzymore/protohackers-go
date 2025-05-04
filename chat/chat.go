@@ -72,6 +72,8 @@ func (chatServer *ChatServer) runChatServer() {
 			if !session.IsConnected() {
 				break
 			}
+			uCounter := usernameMaps[session.username]
+			usernameMaps[session.username] = uCounter - 1
 			for sess := range maps.Values(chatServer.sessions) {
 				if sess.IsConnected() {
 					sess.writeLine(fmt.Sprintf("* %s has left the room", session.username))
