@@ -130,19 +130,19 @@ func step_two(conn net.Conn) {
 
 	for {
 		buf := make([]byte, 9)
-		n, err := conn.Read(buf)
-		if err != nil || len(buf) != n {
+		buffer := bytes.NewBuffer(buf)
+		n, err := buffer.ReadFrom(conn)
+		if err != nil || len(buf) != int(n) {
 			logger := log.Error()
 			if err != nil {
 				logger.Err(err)
 			} else {
-				logger.Str("error", "Did not read enough bytes").Int("n", n).Int("buf", len(buf))
+				logger.Str("error", "Did not read enough bytes").Int64("n", n).Int("buf", len(buf))
 			}
 			logger.Msg("Could not read from connection")
 			return
 		}
 
-		buffer := bytes.NewBuffer(buf)
 		r, _, err := buffer.ReadRune()
 		if err != nil {
 			log.Error().Err(err).Msg("Could not read rune")
