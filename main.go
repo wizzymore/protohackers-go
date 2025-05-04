@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
 	"net"
@@ -129,36 +128,30 @@ func step_two(conn net.Conn) {
 	var data []StepThreeData
 
 	for {
-		buf := make([]byte, 9)
-		buffer := bytes.NewBuffer(buf)
-		n, err := buffer.ReadFrom(conn)
-		if err != nil || len(buf) != int(n) {
+		buf := make([]byte, 1)
+		n, err := conn.Read(buf)
+		if err != nil || len(buf) != n {
 			logger := log.Error()
 			if err != nil {
 				logger.Err(err)
 			} else {
-				logger.Str("error", "Did not read enough bytes").Int64("n", n).Int("buf", len(buf))
+				logger.Str("error", "Did not read enough bytes").Int("n", n).Int("buf_len", len(buf)).Bytes("buf", buf)
 			}
 			logger.Msg("Could not read from connection")
 			return
 		}
 
-		r, _, err := buffer.ReadRune()
-		if err != nil {
-			log.Error().Err(err).Msg("Could not read rune")
-			return
-		}
-
+		r := rune(buf[0])
 		if r == 'I' {
 			d := StepThreeData{}
-			reader.ReadB(buffer, &d.timestamp)
-			reader.ReadB(buffer, &d.price)
+			reader.ReadB(conn, &d.timestamp)
+			reader.ReadB(conn, &d.price)
 			data = append(data, d)
 		} else if r == 'Q' {
 			var minTime int32
 			var maxTime int32
-			reader.ReadB(buffer, &minTime)
-			reader.ReadB(buffer, &maxTime)
+			reader.ReadB(conn, &minTime)
+			reader.ReadB(conn, &maxTime)
 			var sum int32
 			var count int32
 			for it := range slices.Values(data) {
