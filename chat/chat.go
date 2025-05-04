@@ -124,6 +124,7 @@ func (chatServer *ChatServer) runChatServer() {
 				}
 				sess.writeLine(fmt.Sprintf("[%s] %s", session.username, message.text))
 			}
+			log.Info().Str("ip", session.socket.RemoteAddr().String()).Str("name", session.username).Str("text", message.text).Msg("Client sent new text")
 		default:
 			log.Error().Msgf("Message not implemented %#v", message)
 		}
