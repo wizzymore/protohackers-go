@@ -167,17 +167,17 @@ func step_two(conn net.Conn) {
 				Int32("minTime", minTime).
 				Int32("maxTime", maxTime).
 				Msg("Received new query")
-			var sum int32
+			var sum int64
 			var count int32
 			for it := range slices.Values(data) {
 				if minTime <= it.timestamp && it.timestamp <= maxTime {
-					sum += it.price
+					sum += int64(it.price)
 					count++
 				}
 			}
 			var avg int32
 			if count > 0 {
-				avg = sum / count
+				avg = int32(sum / int64(count))
 			}
 			log.Info().Int32("avg", avg).Msg("Sent new average")
 			binary.Write(conn, binary.BigEndian, avg)
