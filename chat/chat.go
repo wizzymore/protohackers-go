@@ -110,6 +110,7 @@ func (chatServer *ChatServer) runChatServer() {
 				} else {
 					session.writeLine("* The room is currently empty")
 				}
+				log.Info().Str("ip", session.socket.RemoteAddr().String()).Str("name", session.username).Msg("Client set their name")
 				break
 			}
 
