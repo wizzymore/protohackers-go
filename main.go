@@ -148,25 +148,25 @@ func step_two(conn net.Conn) {
 		}
 
 		r := rune(buf[0])
-		log.Info().Str("command", string(r)).Msg("Received new command")
+		// log.Info().Str("command", string(r)).Msg("Received new command")
 		if r == 'I' {
 			d := StepThreeData{}
 			reader.ReadB(conn, &d.timestamp)
 			reader.ReadB(conn, &d.price)
-			log.Info().
-				Int32("timestamp", d.timestamp).
-				Int32("price", d.price).
-				Msg("Received new data")
+			// log.Info().
+			// 	Int32("timestamp", d.timestamp).
+			// 	Int32("price", d.price).
+			// 	Msg("Received new data")
 			data = append(data, d)
 		} else if r == 'Q' {
 			var minTime int32
 			var maxTime int32
 			reader.ReadB(conn, &minTime)
 			reader.ReadB(conn, &maxTime)
-			log.Info().
-				Int32("minTime", minTime).
-				Int32("maxTime", maxTime).
-				Msg("Received new query")
+			// log.Info().
+			// 	Int32("minTime", minTime).
+			// 	Int32("maxTime", maxTime).
+			// 	Msg("Received new query")
 			var sum int64
 			var count int32
 			for it := range slices.Values(data) {
