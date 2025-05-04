@@ -3,8 +3,8 @@ package chat
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"net"
-	"slices"
 	"strings"
 	"sync"
 
@@ -13,102 +13,100 @@ import (
 )
 
 type ConnectedMessage struct {
-	session *ChatSession
+	socket net.Conn
 }
 
 type DisconnectedMessage struct {
-	session *ChatSession
+	socket net.Conn
 }
 
 type SentMessage struct {
-	session *ChatSession
-	text    string
+	socket net.Conn
+	text   string
 }
 
 type ChatSession struct {
-	socket    net.Conn
-	username  string
-	connected bool
-	mutex     sync.RWMutex
+	socket   net.Conn
+	socket_m sync.RWMutex
+	username string
 }
 
 type ChatServer struct {
 	server.Server
-	sessions   []*ChatSession
-	m_sessions sync.RWMutex
-	messages   chan any
+	sessions map[net.Conn]*ChatSession
+	messages chan any
 }
 
 func NewChatServer() (s ChatServer, err error) {
 	s.Server, err = server.NewServer(s.HandleClient)
+	s.sessions = make(map[net.Conn]*ChatSession)
 	s.messages = make(chan any)
 	return
 }
 
-func (self *ChatServer) Start() {
-	go self.Server.Start()
+func (chatSever *ChatServer) Start() {
+	go chatSever.Server.Start()
 
-	go self.runChatServer()
+	go chatSever.runChatServer()
 }
 
-func (self *ChatServer) runChatServer() {
+func (chatServer *ChatServer) runChatServer() {
 	log := log.With().Str("service", "CHAT-SERVER").Logger()
 	log.Info().Msg("Chat server starter")
+	usernameMaps := make(map[string]int)
 	for {
-		message := <-self.messages
-		log.Debug().Any("message", message).Msg("Received a new message")
-	free:
-		switch v := message.(type) {
+		m := <-chatServer.messages
+		log.Debug().Any("message", m).Msg("Received a new message")
+		switch message := m.(type) {
 		case ConnectedMessage:
-			// Set session as connected
-			v.session.mutex.Lock()
-			v.session.connected = true
-			v.session.mutex.Unlock()
-
-			// Add session to the list
-			self.m_sessions.Lock()
-			for session := range slices.Values(self.sessions) {
-				if session.username == v.session.username {
-					writeLine(v.session, "Username is already taken")
-					v.session.socket.Close()
-					self.m_sessions.Unlock()
-					break free
-				}
+			session := &ChatSession{
+				socket: message.socket,
 			}
-			self.sessions = append(self.sessions, v.session)
-			self.m_sessions.Unlock()
-
-			self.m_sessions.RLock()
-			for session := range slices.Values(self.sessions) {
-				if session.username == v.session.username {
-					writeLine(session, fmt.Sprintf("* Welcome to the chat room %s!", v.session.username))
-					break
-				}
-				writeLine(session, fmt.Sprintf("* %s just joined!", v.session.username))
-			}
-			self.m_sessions.RUnlock()
+			chatServer.sessions[message.socket] = session
+			session.writeLine("Please enter your username...")
 		case DisconnectedMessage:
-			self.m_sessions.Lock()
-			var idx int
-			for i, session := range self.sessions {
-				if session.username == v.session.username {
-					session.mutex.Lock()
-					session.connected = false
-					session.mutex.Unlock()
-					idx = i
+			session := chatServer.sessions[message.socket]
+			delete(chatServer.sessions, message.socket)
+			for sess := range maps.Values(chatServer.sessions) {
+				if sess.IsConnected() {
+					sess.writeLine(fmt.Sprintf("* %s has left the room", session.username))
+				}
+			}
+		case SentMessage:
+			session := chatServer.sessions[message.socket]
+			if session.username == "" {
+				{
+					uCounter, ok := usernameMaps[message.text]
+					if !ok {
+						session.username = message.text
+						usernameMaps[session.username] = 1
+					} else {
+						session.username = fmt.Sprintf("%s%d", message.text, uCounter)
+						usernameMaps[message.text] = uCounter + 1
+					}
+				}
+				usernames := []string{}
+				for sess := range maps.Values(chatServer.sessions) {
+					if session.socket == sess.socket || !sess.IsConnected() {
+						continue
+					}
+					usernames = append(usernames, sess.username)
+					sess.writeLine(fmt.Sprintf("* %s has entered the room", session.username))
+				}
+				if len(usernames) > 0 {
+					session.writeLine(fmt.Sprintf("* The room contains: %s", strings.Join(usernames, ", ")))
+				} else {
+					session.writeLine("* The room is currently empty")
+				}
+				break
+			}
+
+			for sess := range maps.Values(chatServer.sessions) {
+				if sess.socket == session.socket || !sess.IsConnected() {
 					continue
 				}
-				if session.connected {
-					writeLine(session, fmt.Sprintf("* %s just disconnected!", v.session.username))
-				}
+				sess.writeLine(fmt.Sprintf("[%s] %s", session.username, message.text))
 			}
-			if len(self.sessions) > 1 {
-				self.sessions[idx] = self.sessions[len(self.sessions)-1]
-				self.sessions = self.sessions[:len(self.sessions)-1]
-			} else {
-				self.sessions = []*ChatSession{}
-			}
-			self.m_sessions.Unlock()
 		default:
 			log.Error().Msgf("Message not implemented %#v", message)
 		}
@@ -118,17 +116,17 @@ func (self *ChatServer) runChatServer() {
 func (cs *ChatServer) HandleClient(conn net.Conn) {
 	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
 
-	session := &ChatSession{
-		socket: conn,
-	}
-
 	defer func() {
 		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
 		conn.Close()
-		session.Disconnect(cs)
+		cs.messages <- DisconnectedMessage{
+			socket: conn,
+		}
 	}()
 
-	writeLine(session, "Please enter your username...")
+	cs.messages <- ConnectedMessage{
+		socket: conn,
+	}
 
 	buffer := bytes.NewBuffer(nil)
 	for {
@@ -140,50 +138,39 @@ func (cs *ChatServer) HandleClient(conn net.Conn) {
 		if err != nil {
 			return
 		}
-		fmt.Println("Here")
 
 		if buffer.Available() > 0 {
-			session.ProcessClient(cs, buffer)
+			fmt.Println("Here")
+			if !strings.Contains(buffer.String(), "\n") {
+				continue
+			}
+			text, _ := buffer.ReadString('\n')
+			// Just pressed enter
+			if len(text) == 1 {
+				continue
+			}
+			cs.messages <- SentMessage{
+				socket: conn,
+				text:   text[:len(text)-1],
+			}
 		}
 	}
 }
 
-func (self *ChatSession) IsConnected() bool {
-	return self.connected
+func (chatSession *ChatSession) IsConnected() bool {
+	return chatSession.username != ""
 }
 
-func (self *ChatSession) Disconnect(cs *ChatServer) {
+func (chatSession *ChatSession) Disconnect(cs *ChatServer) {
 	cs.messages <- DisconnectedMessage{
-		session: self,
+		socket: chatSession.socket,
 	}
 }
 
-func (self *ChatSession) ProcessClient(cs *ChatServer, buffer *bytes.Buffer) {
-	if self.username == "" {
-		if strings.Index(buffer.String(), "\n") == -1 {
-			return
-		}
-
-		{
-			self.mutex.Lock()
-			defer self.mutex.Unlock()
-			self.username, _ = buffer.ReadString('\n')
-			self.username = strings.TrimRight(self.username, "\n")
-		}
-
-		cs.messages <- ConnectedMessage{
-			session: self,
-		}
-	}
-	if !self.IsConnected() {
-		return
-	}
-}
-
-func writeLine(session *ChatSession, line string) error {
-	session.mutex.Lock()
-	defer session.mutex.Unlock()
+func (chatSession *ChatSession) writeLine(line string) error {
+	chatSession.socket_m.Lock()
+	defer chatSession.socket_m.Unlock()
 	line = strings.TrimRight(line, "\n")
-	_, err := session.socket.Write(fmt.Appendf(nil, "%s\n", line))
+	_, err := chatSession.socket.Write(fmt.Appendf(nil, "%s\n", line))
 	return err
 }
