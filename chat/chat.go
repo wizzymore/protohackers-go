@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -56,15 +57,16 @@ func (chatServer *ChatServer) runChatServer() {
 	usernameMaps := make(map[string]int)
 	for {
 		m := <-chatServer.messages
-		log.Debug().Any("message", m).Msg("Received a new message")
 		switch message := m.(type) {
 		case ConnectedMessage:
+			log.Debug().Str("ip", message.socket.RemoteAddr().String()).Msg("New client connected")
 			session := &ChatSession{
 				socket: message.socket,
 			}
 			chatServer.sessions[message.socket] = session
 			session.writeLine("Please enter your username...")
 		case DisconnectedMessage:
+			log.Debug().Str("ip", message.socket.RemoteAddr().String()).Msg("Client disconnected")
 			session := chatServer.sessions[message.socket]
 			delete(chatServer.sessions, message.socket)
 			for sess := range maps.Values(chatServer.sessions) {
@@ -73,9 +75,10 @@ func (chatServer *ChatServer) runChatServer() {
 				}
 			}
 		case SentMessage:
+			log.Debug().Str("message", message.text).Msg("Received a new chat message")
 			session := chatServer.sessions[message.socket]
 			if session.username == "" {
-				if message.text == "" {
+				if message.text == "" || !regexp.MustCompile(`^[a-zA-Z0-9]*$`).MatchString(message.text) {
 					session.socket.Close()
 					break
 				}
@@ -148,7 +151,6 @@ func (cs *ChatServer) HandleClient(conn net.Conn) {
 		}
 
 		if buffer.Available() > 0 {
-			fmt.Println("Here")
 			if !strings.Contains(buffer.String(), "\n") {
 				continue
 			}
