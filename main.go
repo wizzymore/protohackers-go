@@ -160,7 +160,10 @@ func step_two(conn net.Conn) {
 					count++
 				}
 			}
-			avg := sum / count
+			var avg int32
+			if count > 0 {
+				avg = sum / count
+			}
 			binary.Write(conn, binary.BigEndian, avg)
 		} else {
 			log.Error().Msgf("Did not receive I or Q command, got: '%v'", r)
