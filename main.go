@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -131,6 +132,11 @@ func step_two(conn net.Conn) {
 		buf := make([]byte, 1)
 		n, err := conn.Read(buf)
 		if err != nil || len(buf) != n {
+			if errors.Is(err, io.EOF) {
+				log.Info().Msg("Client closed connection")
+				return
+			}
+
 			logger := log.Error()
 			if err != nil {
 				logger.Err(err)
@@ -142,16 +148,25 @@ func step_two(conn net.Conn) {
 		}
 
 		r := rune(buf[0])
+		log.Info().Str("command", string(r)).Msg("Received new command")
 		if r == 'I' {
 			d := StepThreeData{}
 			reader.ReadB(conn, &d.timestamp)
 			reader.ReadB(conn, &d.price)
+			log.Info().
+				Int32("timestamp", d.timestamp).
+				Int32("price", d.price).
+				Msg("Received new data")
 			data = append(data, d)
 		} else if r == 'Q' {
 			var minTime int32
 			var maxTime int32
 			reader.ReadB(conn, &minTime)
 			reader.ReadB(conn, &maxTime)
+			log.Info().
+				Int32("minTime", minTime).
+				Int32("maxTime", maxTime).
+				Msg("Received new query")
 			var sum int32
 			var count int32
 			for it := range slices.Values(data) {
@@ -164,6 +179,7 @@ func step_two(conn net.Conn) {
 			if count > 0 {
 				avg = sum / count
 			}
+			log.Info().Int32("avg", avg).Msg("Sent new average")
 			binary.Write(conn, binary.BigEndian, avg)
 		} else {
 			log.Error().Msgf("Did not receive I or Q command, got: '%v'", r)
