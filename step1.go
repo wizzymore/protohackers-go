@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net"
+	"strings"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type StepOneRequest struct {
@@ -50,4 +53,42 @@ func isPrime(n int) bool {
 		}
 	}
 	return true
+}
+
+func step_one(conn net.Conn) {
+	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
+	defer func() {
+		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
+		conn.Close()
+	}()
+
+	left := []byte{}
+	for {
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		log.Info().Msgf("Got new buffer %s", strings.ReplaceAll(string(buf), "\n", "\\n"))
+		if err != nil {
+			if err == io.EOF {
+				log.Info().Msg("Client closed the connection")
+				return
+			}
+			log.Err(err).Msg("Client read error")
+			return
+		}
+
+		start := 0
+		for i := range buf[:n] {
+			if buf[i] == '\n' {
+				left = append(left, buf[start:i]...)
+				if !handle_step_one(log, conn, left) {
+					conn.Write([]byte("bye, bye\n"))
+					return
+				}
+				left = []byte{}
+				start = i + 1
+			} else if i == n-1 {
+				left = append(left, buf[start:n]...)
+			}
+		}
+	}
 }
