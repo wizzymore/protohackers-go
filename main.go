@@ -136,7 +136,7 @@ func step_two(conn net.Conn) {
 			if err != nil {
 				logger.Err(err)
 			} else {
-				logger.Str("error", "Did not read enough bytes")
+				logger.Str("error", "Did not read enough bytes").Int("n", n).Int("buf", len(buf))
 			}
 			logger.Msg("Could not read from connection")
 			return
