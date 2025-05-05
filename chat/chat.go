@@ -13,19 +13,6 @@ import (
 	"github.com/wizzymore/tcp-go/server"
 )
 
-type ConnectedMessage struct {
-	socket net.Conn
-}
-
-type DisconnectedMessage struct {
-	socket net.Conn
-}
-
-type SentMessage struct {
-	socket net.Conn
-	text   string
-}
-
 type ChatSession struct {
 	socket   net.Conn
 	socket_m sync.RWMutex
@@ -35,13 +22,24 @@ type ChatSession struct {
 type ChatServer struct {
 	server.Server
 	sessions map[net.Conn]*ChatSession
-	messages chan any
+
+	connected    chan net.Conn
+	disconnected chan net.Conn
+	message      chan struct {
+		socket net.Conn
+		value  string
+	}
 }
 
 func NewChatServer() (s ChatServer, err error) {
 	s.Server, err = server.NewServer(s.HandleClient)
 	s.sessions = make(map[net.Conn]*ChatSession)
-	s.messages = make(chan any)
+	s.connected = make(chan net.Conn)
+	s.disconnected = make(chan net.Conn)
+	s.message = make(chan struct {
+		socket net.Conn
+		value  string
+	})
 	return
 }
 
@@ -56,19 +54,18 @@ func (chatServer *ChatServer) runChatServer() {
 	log.Info().Msg("Chat server starter")
 	usernameMaps := make(map[string]int)
 	for {
-		m := <-chatServer.messages
-		switch message := m.(type) {
-		case ConnectedMessage:
-			log.Debug().Str("ip", message.socket.RemoteAddr().String()).Msg("New client connected")
+		select {
+		case socket := <-chatServer.connected:
+			log.Debug().Str("ip", socket.RemoteAddr().String()).Msg("New client connected")
 			session := &ChatSession{
-				socket: message.socket,
+				socket: socket,
 			}
-			chatServer.sessions[message.socket] = session
+			chatServer.sessions[socket] = session
 			session.writeLine("Please enter your username...")
-		case DisconnectedMessage:
-			log.Debug().Str("ip", message.socket.RemoteAddr().String()).Msg("Client disconnected")
-			session := chatServer.sessions[message.socket]
-			delete(chatServer.sessions, message.socket)
+		case socket := <-chatServer.disconnected:
+			log.Debug().Str("ip", socket.RemoteAddr().String()).Msg("Client disconnected")
+			session := chatServer.sessions[socket]
+			delete(chatServer.sessions, socket)
 			if !session.IsConnected() {
 				break
 			}
@@ -83,22 +80,22 @@ func (chatServer *ChatServer) runChatServer() {
 					sess.writeLine(fmt.Sprintf("* %s has left the room", session.username))
 				}
 			}
-		case SentMessage:
-			log.Debug().Str("message", message.text).Msg("Received a new chat message")
+		case message := <-chatServer.message:
+			log.Debug().Str("message", message.value).Msg("Received a new chat message")
 			session := chatServer.sessions[message.socket]
 			if session.username == "" {
-				if message.text == "" || !regexp.MustCompile(`^[a-zA-Z0-9]*$`).MatchString(message.text) {
+				if message.value == "" || !regexp.MustCompile(`^[a-zA-Z0-9]*$`).MatchString(message.value) {
 					session.socket.Close()
 					break
 				}
 				{
-					uCounter, ok := usernameMaps[message.text]
+					uCounter, ok := usernameMaps[message.value]
 					if !ok {
-						session.username = message.text
+						session.username = message.value
 						usernameMaps[session.username] = 1
 					} else {
-						session.username = fmt.Sprintf("%s%d", message.text, uCounter)
-						usernameMaps[message.text] = uCounter + 1
+						session.username = fmt.Sprintf("%s%d", message.value, uCounter)
+						usernameMaps[message.value] = uCounter + 1
 					}
 				}
 				usernames := []string{}
@@ -118,7 +115,7 @@ func (chatServer *ChatServer) runChatServer() {
 				break
 			}
 
-			if message.text == "" {
+			if message.value == "" {
 				break
 			}
 
@@ -126,11 +123,9 @@ func (chatServer *ChatServer) runChatServer() {
 				if sess.socket == session.socket || !sess.IsConnected() {
 					continue
 				}
-				sess.writeLine(fmt.Sprintf("[%s] %s", session.username, message.text))
+				sess.writeLine(fmt.Sprintf("[%s] %s", session.username, message.value))
 			}
-			log.Info().Str("ip", session.socket.RemoteAddr().String()).Str("name", session.username).Str("text", message.text).Msg("Client sent new text")
-		default:
-			log.Error().Msgf("Message not implemented %#v", message)
+			log.Info().Str("ip", session.socket.RemoteAddr().String()).Str("name", session.username).Str("text", message.value).Msg("Client sent new text")
 		}
 	}
 }
@@ -141,14 +136,10 @@ func (cs *ChatServer) HandleClient(conn net.Conn) {
 	defer func() {
 		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
 		conn.Close()
-		cs.messages <- DisconnectedMessage{
-			socket: conn,
-		}
+		cs.disconnected <- conn
 	}()
 
-	cs.messages <- ConnectedMessage{
-		socket: conn,
-	}
+	cs.connected <- conn
 
 	reader := bufio.NewReader(conn)
 	for {
@@ -157,21 +148,18 @@ func (cs *ChatServer) HandleClient(conn net.Conn) {
 			return
 		}
 
-		cs.messages <- SentMessage{
+		cs.message <- struct {
+			socket net.Conn
+			value  string
+		}{
 			socket: conn,
-			text:   strings.TrimRight(text, "\r\n"),
+			value:  strings.TrimRight(text, "\r\n"),
 		}
 	}
 }
 
 func (chatSession *ChatSession) IsConnected() bool {
 	return chatSession.username != ""
-}
-
-func (chatSession *ChatSession) Disconnect(cs *ChatServer) {
-	cs.messages <- DisconnectedMessage{
-		socket: chatSession.socket,
-	}
 }
 
 func (chatSession *ChatSession) writeLine(line string) error {
