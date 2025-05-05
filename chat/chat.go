@@ -1,7 +1,7 @@
 package chat
 
 import (
-	"bytes"
+	"bufio"
 	"fmt"
 	"maps"
 	"net"
@@ -150,26 +150,16 @@ func (cs *ChatServer) HandleClient(conn net.Conn) {
 		socket: conn,
 	}
 
-	buffer := bytes.NewBuffer(nil)
+	reader := bufio.NewReader(conn)
 	for {
-		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
-		if n > 0 {
-			buffer.Write(buf[:n])
-		}
+		text, err := reader.ReadString('\n')
 		if err != nil {
 			return
 		}
 
-		if buffer.Available() > 0 {
-			if !strings.Contains(buffer.String(), "\n") {
-				continue
-			}
-			text, _ := buffer.ReadString('\n')
-			cs.messages <- SentMessage{
-				socket: conn,
-				text:   text[:len(text)-1],
-			}
+		cs.messages <- SentMessage{
+			socket: conn,
+			text:   strings.TrimRight(text, "\r\n"),
 		}
 	}
 }
