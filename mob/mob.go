@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"regexp"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/server"
@@ -52,7 +53,7 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 	}
 	messageChan := make(chan message)
 
-	regex, err := regexp.Compile("\\b7[a-zA-Z0-9]{25,34}\\b")
+	regex, err := regexp.Compile("^7[a-zA-Z0-9]{25,34}$")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to compile regex")
 		return
@@ -115,8 +116,11 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 			log.Debug().Msg("Context done in main select")
 			return
 		case msg := <-messageChan:
-			text := regex.ReplaceAllString(msg.value, BOGUS)
-			_, err = msg.socket.Write([]byte(text))
+			strs := strings.Split(msg.value, " ")
+			for i, str := range strs {
+				strs[i] = regex.ReplaceAllString(str, BOGUS)
+			}
+			_, err = msg.socket.Write([]byte(strings.Join(strs, " ")))
 			if err != nil {
 				log.Error().Err(err).Msg("Error writing to client")
 				return
