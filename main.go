@@ -23,7 +23,7 @@ func init() {
 	fmt.Println("Log level set to:", *logLevelFlag)
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevelFlag))
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 }
 
 type Server interface {
@@ -50,7 +50,7 @@ func main() {
 		}
 	}
 	if command == "" {
-		os.Stderr.WriteString("No command provided. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n")
+		os.Stdout.WriteString("No command provided. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n")
 		os.Exit(0)
 	}
 
@@ -68,7 +68,7 @@ func main() {
 	case "means":
 		s, err = server.NewServer(step_two)
 	default:
-		os.Stderr.WriteString(fmt.Sprintf("Unknown command: %s. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n", command))
+		os.Stdout.WriteString(fmt.Sprintf("Unknown command: %s. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n", command))
 		os.Exit(0)
 	}
 	if err != nil {
