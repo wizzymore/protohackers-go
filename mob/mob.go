@@ -2,6 +2,7 @@ package mob
 
 import (
 	"bufio"
+	"context"
 	"net"
 	"regexp"
 
@@ -48,7 +49,6 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 		log.Error().Err(err).Msg("Failed to connect to bogus server")
 		return
 	}
-	closeChan := make(chan struct{})
 	messageChan := make(chan message)
 
 	regex, err := regexp.Compile("7[a-zA-Z0-9]{25,35}")
@@ -56,12 +56,15 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 		log.Error().Err(err).Msg("Failed to compile regex")
 		return
 	}
+	ctx, ctx_cancel := context.WithCancel(context.Background())
+	defer ctx_cancel()
 
 	go func() {
 		reader := bufio.NewReader(bogusServer)
 		for {
 			select {
-			case <-closeChan:
+			case <-ctx.Done():
+				log.Debug().Msg("Context done in bogus server reader")
 				return
 			default:
 			}
@@ -69,7 +72,7 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 			text, err := reader.ReadString('\n')
 			if err != nil {
 				log.Error().Err(err).Msg("Error reading from bogus server")
-				closeChan <- struct{}{}
+				ctx_cancel()
 				return
 			}
 
@@ -84,14 +87,15 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 		reader := bufio.NewReader(conn)
 		for {
 			select {
-			case <-closeChan:
+			case <-ctx.Done():
+				log.Debug().Msg("Context done in client reader")
 				return
 			default:
 			}
 
 			text, err := reader.ReadString('\n')
 			if err != nil {
-				closeChan <- struct{}{}
+				ctx_cancel()
 				return
 			}
 
@@ -102,12 +106,18 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 		}
 	}()
 
-	for msg := range messageChan {
-		text := regex.ReplaceAllString(msg.value, BOGUS)
-		_, err = msg.socket.Write([]byte(text))
-		if err != nil {
-			log.Error().Err(err).Msg("Error writing to client")
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debug().Msg("Context done in main select")
 			return
+		case msg := <-messageChan:
+			text := regex.ReplaceAllString(msg.value, BOGUS)
+			_, err = msg.socket.Write([]byte(text))
+			if err != nil {
+				log.Error().Err(err).Msg("Error writing to client")
+				return
+			}
 		}
 	}
 }
