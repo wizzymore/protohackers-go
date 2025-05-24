@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -116,11 +117,14 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 			log.Debug().Msg("Context done in main select")
 			return
 		case msg := <-messageChan:
-			strs := strings.Split(msg.value, " ")
-			for i, str := range strs {
-				strs[i] = regex.ReplaceAllString(str, BOGUS)
+			splits := strings.Split(strings.TrimSpace(msg.value), " ")
+			for i, split := range splits {
+				if regex.MatchString(split) {
+					splits[i] = BOGUS
+				}
 			}
-			_, err = msg.socket.Write([]byte(strings.Join(strs, " ")))
+
+			_, err = msg.socket.Write(fmt.Appendf(nil, "%s\n", strings.Join(splits, " ")))
 			if err != nil {
 				log.Error().Err(err).Msg("Error writing to client")
 				return
