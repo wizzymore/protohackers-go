@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -12,8 +14,13 @@ import (
 	"github.com/wizzymore/tcp-go/server"
 )
 
+var logLevelFlag = flag.Int("log", int(zerolog.DebugLevel), "Set the log level: 0=debug, 1=info, 2=warn, 3=error, 4=fatal, 5=panic")
+
 func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	flag.Parse()
+	fmt.Println("Log level set to:", *logLevelFlag)
+	zerolog.SetGlobalLevel(zerolog.Level(*logLevelFlag))
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 }
@@ -25,16 +32,24 @@ type Server interface {
 
 func main() {
 	command := ""
-	for _, cmd := range os.Args[1:] {
-		if strings.HasPrefix(cmd, "-") {
-			continue
+	{
+		should_skip := false
+		for _, cmd := range os.Args[1:] {
+			if strings.HasPrefix(cmd, "-") {
+				should_skip = true
+				continue
+			}
+			if should_skip {
+				should_skip = false
+				continue
+			}
+			command = strings.ToLower(cmd)
+			command = strings.Trim(command, " \t\n")
+			break
 		}
-		command = strings.ToLower(cmd)
-		command = strings.Trim(command, " \t\n")
-		break
 	}
 	if command == "" {
-		log.Error().Msg("No command provided. Valid commands: [\"chat\", \"test\", \"prime-time\", \"means\"]")
+		os.Stderr.WriteString("No command provided. Valid commands: [\"chat\", \"test\", \"prime-time\", \"means\"]\n")
 		os.Exit(0)
 	}
 
@@ -50,7 +65,8 @@ func main() {
 	case "means":
 		s, err = server.NewServer(step_two)
 	default:
-		log.Fatal().Msgf("Unknown command: %s. Valid commands: [\"chat\", \"test\", \"prime-time\", \"means\"]", command)
+		os.Stderr.WriteString(fmt.Sprintf("Unknown command: %s. Valid commands: [\"chat\", \"test\", \"prime-time\", \"means\"]\n", command))
+		os.Exit(0)
 	}
 	if err != nil {
 		log.Error().Err(err).Msg("Error creating server")
