@@ -22,7 +22,7 @@ func init() {
 	fmt.Println("Log level set to:", *logLevelFlag)
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevelFlag))
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 }
 
 type Server interface {
