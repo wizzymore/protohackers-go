@@ -51,7 +51,7 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 	}
 	messageChan := make(chan message)
 
-	regex, err := regexp.Compile("7[a-zA-Z0-9]{25,35}")
+	regex, err := regexp.Compile("7[a-zA-Z0-9]{24,34}")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to compile regex")
 		return
