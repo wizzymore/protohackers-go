@@ -3,6 +3,7 @@ package mob
 import (
 	"bufio"
 	"context"
+	"errors"
 	"net"
 	"regexp"
 
@@ -51,7 +52,7 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 	}
 	messageChan := make(chan message)
 
-	regex, err := regexp.Compile("7[a-zA-Z0-9]{24,34}")
+	regex, err := regexp.Compile("\\b7[a-zA-Z0-9]{24,34}\\b")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to compile regex")
 		return
@@ -71,7 +72,9 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 
 			text, err := reader.ReadString('\n')
 			if err != nil {
-				log.Error().Err(err).Msg("Error reading from bogus server")
+				if !errors.Is(err, net.ErrClosed) {
+					log.Error().Err(err).Msg("Error reading from bogus server")
+				}
 				ctx_cancel()
 				return
 			}
