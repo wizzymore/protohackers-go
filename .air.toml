@@ -3,7 +3,7 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-args_bin = ["chat"]
+args_bin = ["mob"]
 bin = "tmp/main.exe"
 cmd = "go build -o ./tmp/main.exe ."
 delay = 1000

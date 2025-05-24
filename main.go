@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/chat"
+	"github.com/wizzymore/tcp-go/mob"
 	"github.com/wizzymore/tcp-go/server"
 )
 
@@ -49,13 +50,15 @@ func main() {
 		}
 	}
 	if command == "" {
-		os.Stderr.WriteString("No command provided. Valid commands: [\"chat\", \"test\", \"prime-time\", \"means\"]\n")
+		os.Stderr.WriteString("No command provided. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n")
 		os.Exit(0)
 	}
 
 	var s Server
 	var err error
 	switch command {
+	case "mob":
+		s, err = mob.NewMobServer()
 	case "chat":
 		s, err = chat.NewChatServer()
 	case "test":
@@ -65,7 +68,7 @@ func main() {
 	case "means":
 		s, err = server.NewServer(step_two)
 	default:
-		os.Stderr.WriteString(fmt.Sprintf("Unknown command: %s. Valid commands: [\"chat\", \"test\", \"prime-time\", \"means\"]\n", command))
+		os.Stderr.WriteString(fmt.Sprintf("Unknown command: %s. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n", command))
 		os.Exit(0)
 	}
 	if err != nil {
