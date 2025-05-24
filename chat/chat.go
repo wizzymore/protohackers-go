@@ -75,7 +75,7 @@ func (chatServer *ChatServer) runChatServer() {
 				break
 			}
 			uCounter := usernameMaps[session.username]
-			if uCounter == 1 {
+			if uCounter <= 1 {
 				delete(usernameMaps, session.username)
 			} else {
 				usernameMaps[session.username] = uCounter - 1
