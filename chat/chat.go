@@ -20,7 +20,7 @@ type ChatSession struct {
 }
 
 type ChatServer struct {
-	server.Server
+	server   *server.Server
 	sessions map[net.Conn]*ChatSession
 
 	connected    chan net.Conn
@@ -31,8 +31,9 @@ type ChatServer struct {
 	}
 }
 
-func NewChatServer() (s ChatServer, err error) {
-	s.Server, err = server.NewServer(s.HandleClient)
+func NewChatServer() (s *ChatServer, err error) {
+	s = &ChatServer{}
+	s.server, err = server.NewServer(s.HandleClient)
 	s.sessions = make(map[net.Conn]*ChatSession)
 	s.connected = make(chan net.Conn)
 	s.disconnected = make(chan net.Conn)
@@ -43,10 +44,14 @@ func NewChatServer() (s ChatServer, err error) {
 	return
 }
 
-func (chatSever *ChatServer) Start() {
-	go chatSever.Server.Start()
+func (chatServer *ChatServer) Start() {
+	go chatServer.server.Start()
 
-	go chatSever.runChatServer()
+	go chatServer.runChatServer()
+}
+
+func (chatServer *ChatServer) Stop() error {
+	return chatServer.server.Stop()
 }
 
 func (chatServer *ChatServer) runChatServer() {

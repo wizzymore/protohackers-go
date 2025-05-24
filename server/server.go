@@ -14,7 +14,8 @@ type Server struct {
 	handleConnection Handler
 }
 
-func NewServer(handler Handler) (s Server, err error) {
+func NewServer(handler Handler) (s *Server, err error) {
+	s = &Server{}
 	s.listener, err = net.Listen("tcp", ":8080")
 	s.handleConnection = handler
 	return
