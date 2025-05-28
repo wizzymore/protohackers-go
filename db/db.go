@@ -1,6 +1,7 @@
 package db
 
 import (
+	"bytes"
 	"net"
 	"strings"
 	"sync"
@@ -70,16 +71,12 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 		return
 	}
 	log.Info().Str("key", message).Msg("Got a new read")
-	b := strings.Builder{}
+	b := bytes.Buffer{}
 	b.Grow(len(message) + len(value) + len("="))
 	b.WriteString(message)
 	b.WriteRune('=')
 	b.WriteString(value)
-	out := []byte(b.String())
-	if len(out) > 1000 {
-		out = out[0:1000]
-	}
-	n, err := s.server.Socket.WriteTo(out, addr)
+	n, err := s.server.Socket.WriteTo(b.Bytes(), addr)
 	if err != nil {
 		log.Error().Msg("Failed to write message to socket")
 	}
