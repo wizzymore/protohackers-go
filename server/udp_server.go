@@ -11,7 +11,7 @@ type UdpHandler func(string, net.Addr)
 type UdpServer struct {
 	Running          bool
 	Socket           net.PacketConn
-	Sync             bool
+	Async            bool
 	handleConnection UdpHandler
 }
 
@@ -24,8 +24,11 @@ func NewUdpServer(handler UdpHandler) (s *UdpServer, err error) {
 
 func (s *UdpServer) Start() {
 	log.Info().Msgf("Server started on port %d", s.Socket.LocalAddr().(*net.UDPAddr).Port)
+	if !s.Async {
+		log.Info().Msg("Running in sync")
+	}
 	for {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 1000)
 		n, addr, err := s.Socket.ReadFrom(buf)
 		if err != nil {
 			if !s.Running {
@@ -33,15 +36,12 @@ func (s *UdpServer) Start() {
 			}
 
 			log.Error().Err(err).Msg("Error reading from socket")
-			return
-		}
-
-		if n == 0 {
 			continue
 		}
 
-		log.Info().Str("remote_addr", addr.String()).Msgf("Accepted packet from %s", addr.String())
-		if s.Sync {
+		log.Info().Msgf("Received %d bytes from %s", n, addr.String())
+
+		if s.Async {
 			go s.handleConnection(string(buf[0:n]), addr)
 		} else {
 			s.handleConnection(string(buf[0:n]), addr)
