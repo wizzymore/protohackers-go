@@ -46,6 +46,8 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 			return
 		}
 
+		log.Info().Str("key", key).Str("value", value).Msg("Got a new write")
+
 		s.mu.Lock()
 		s.data[key] = value
 		s.mu.Unlock()
@@ -62,6 +64,7 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 			value = v
 		}
 	}
+	log.Info().Str("key", message).Msg("Got a new write")
 	b := strings.Builder{}
 	b.Grow(len(message) + len(value) + len("="))
 	b.WriteString(message)
