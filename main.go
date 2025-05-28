@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/chat"
+	"github.com/wizzymore/tcp-go/db"
 	"github.com/wizzymore/tcp-go/mob"
 	"github.com/wizzymore/tcp-go/server"
 )
@@ -59,6 +60,8 @@ func main() {
 	switch command {
 	case "mob":
 		s, err = mob.NewMobServer()
+	case "db":
+		s, err = db.NewDbServer()
 	case "chat":
 		s, err = chat.NewChatServer()
 	case "test":

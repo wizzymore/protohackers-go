@@ -9,24 +9,24 @@ import (
 type Handler func(conn net.Conn)
 
 type Server struct {
-	running          bool
-	listener         net.Listener
+	Running          bool
+	Listener         net.Listener
 	handleConnection Handler
 }
 
 func NewServer(handler Handler) (s *Server, err error) {
 	s = &Server{}
-	s.listener, err = net.Listen("tcp", ":8080")
+	s.Listener, err = net.Listen("tcp", ":8081")
 	s.handleConnection = handler
 	return
 }
 
 func (s *Server) Start() {
-	log.Info().Msgf("Server started on port %d", s.listener.Addr().(*net.TCPAddr).Port)
+	log.Info().Msgf("Server started on port %d", s.Listener.Addr().(*net.TCPAddr).Port)
 	for {
-		conn, err := s.listener.Accept()
+		conn, err := s.Listener.Accept()
 		if err != nil {
-			if !s.running {
+			if !s.Running {
 				return
 			}
 
@@ -40,8 +40,8 @@ func (s *Server) Start() {
 }
 
 func (s *Server) Stop() error {
-	s.running = false
-	if err := s.listener.Close(); err != nil {
+	s.Running = false
+	if err := s.Listener.Close(); err != nil {
 		return err
 	}
 	return nil
