@@ -4,6 +4,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/server"
@@ -33,6 +34,7 @@ func (chatServer *DbServer) Stop() error {
 }
 
 func (s *DbServer) HandleClient(message string, addr net.Addr) {
+	s.server.Socket.SetWriteDeadline(time.Now().Add(10 * time.Minute))
 	log := log.With().Str("remote_addr", addr.String()).Logger()
 	log.Info().Str("message", message).Msg("Got new message")
 
@@ -74,6 +76,10 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 	if len(out) > 1000 {
 		out = out[0:1000]
 	}
-	s.server.Socket.WriteTo(out, addr)
+	n, err := s.server.Socket.WriteTo(out, addr)
+	if err != nil {
+		log.Error().Msg("Failed to write message to socket")
+	}
+	log.Info().Int("bytes", n).Msg("Wrote bytes to socket")
 	s.mu.RUnlock()
 }
