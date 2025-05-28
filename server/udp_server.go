@@ -2,6 +2,7 @@ package server
 
 import (
 	"net"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 )
@@ -40,7 +41,8 @@ func (s *UdpServer) Start() {
 		}
 
 		log.Info().Str("remote_addr", addr.String()).Msgf("Accepted connection from %s", addr.String())
-		go s.handleConnection(string(buf[0:n-1]), addr)
+		message := strings.TrimRight(string(buf[0:n]), "\r\n")
+		go s.handleConnection(message, addr)
 	}
 }
 
