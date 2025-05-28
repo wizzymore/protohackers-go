@@ -12,6 +12,7 @@ type UdpHandler func(string, net.Addr)
 type UdpServer struct {
 	Running          bool
 	Socket           net.PacketConn
+	Sync             bool
 	handleConnection UdpHandler
 }
 
@@ -42,7 +43,11 @@ func (s *UdpServer) Start() {
 
 		log.Info().Str("remote_addr", addr.String()).Msgf("Accepted packet from %s", addr.String())
 		message := strings.TrimRight(string(buf[0:n]), "\r\n")
-		s.handleConnection(message, addr)
+		if s.Sync {
+			s.handleConnection(message, addr)
+		} else {
+			go s.handleConnection(message, addr)
+		}
 	}
 }
 
