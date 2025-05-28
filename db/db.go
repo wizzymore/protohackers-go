@@ -59,6 +59,13 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 
 	log.Info().Msgf("Client %s sent a get request for `%q`", addr.String(), message)
 
+	if message == "delete" {
+		s.mu.Lock()
+		s.data = make(map[string]string)
+		s.mu.Unlock()
+		return
+	}
+
 	value := ""
 	if message == "version" {
 		value = VERSION
