@@ -71,7 +71,9 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 	b.Grow(len(message) + len(value) + len("="))
 	b.WriteString(message)
 	b.WriteRune('=')
-	b.WriteString(value)
+	if value != "" {
+		b.WriteString(value)
+	}
 	out := []byte(b.String())
 	if len(out) > 1000 {
 		out = out[0:1000]
