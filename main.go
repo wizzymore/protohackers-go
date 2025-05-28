@@ -17,6 +17,7 @@ import (
 )
 
 var logLevelFlag = flag.Int("log", int(zerolog.DebugLevel), "Set the log level: 0=debug, 1=info, 2=warn, 3=error, 4=fatal, 5=panic")
+var colorFlag = flag.Bool("nocolor", true, "Set the log level: 0=debug, 1=info, 2=warn, 3=error, 4=fatal, 5=panic")
 
 func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
@@ -24,7 +25,7 @@ func init() {
 	fmt.Println("Log level set to:", *logLevelFlag)
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevelFlag))
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *colorFlag})
 }
 
 type Server interface {
