@@ -66,7 +66,7 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 			value = v
 		}
 	}
-	log.Info().Str("key", message).Msg("Got a new write")
+	log.Info().Str("key", message).Msg("Got a new read")
 	b := strings.Builder{}
 	b.Grow(len(message) + len(value) + len("="))
 	b.WriteString(message)

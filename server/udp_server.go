@@ -40,7 +40,7 @@ func (s *UdpServer) Start() {
 			continue
 		}
 
-		log.Info().Str("remote_addr", addr.String()).Msgf("Accepted connection from %s", addr.String())
+		log.Info().Str("remote_addr", addr.String()).Msgf("Accepted packet from %s", addr.String())
 		message := strings.TrimRight(string(buf[0:n]), "\r\n")
 		go s.handleConnection(message, addr)
 	}
