@@ -3,7 +3,6 @@ package server
 import (
 	"net"
 	"strings"
-	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -26,7 +25,6 @@ func NewUdpServer(handler UdpHandler) (s *UdpServer, err error) {
 func (s *UdpServer) Start() {
 	log.Info().Msgf("Server started on port %d", s.Socket.LocalAddr().(*net.UDPAddr).Port)
 	for {
-		s.Socket.SetReadDeadline(time.Now().Add(10 * time.Minute))
 		buf := make([]byte, 1024)
 		n, addr, err := s.Socket.ReadFrom(buf)
 		if err != nil {
