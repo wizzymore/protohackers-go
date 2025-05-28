@@ -44,9 +44,9 @@ func (s *UdpServer) Start() {
 		log.Info().Str("remote_addr", addr.String()).Msgf("Accepted packet from %s", addr.String())
 		message := strings.TrimRight(string(buf[0:n]), "\r\n")
 		if s.Sync {
-			s.handleConnection(message, addr)
-		} else {
 			go s.handleConnection(message, addr)
+		} else {
+			s.handleConnection(message, addr)
 		}
 	}
 }
