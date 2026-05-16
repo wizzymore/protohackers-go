@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -17,63 +18,51 @@ import (
 )
 
 var logLevelFlag = flag.Int("log", int(zerolog.DebugLevel), "Set the log level: 0=debug, 1=info, 2=warn, 3=error, 4=fatal, 5=panic")
-var colorFlag = flag.Bool("nocolor", true, "Set the log level: 0=debug, 1=info, 2=warn, 3=error, 4=fatal, 5=panic")
+var colorFlag = flag.Bool("nocolor", false, "Disable colored log output")
 
 func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	flag.Parse()
-	fmt.Println("Log level set to:", *logLevelFlag)
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevelFlag))
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *colorFlag})
 }
 
-type Server interface {
-	Start()
-	Stop() error
+type ServerFunc func() (server.IServer, error)
+
+var servers = map[string]ServerFunc{
+	"mob":        mob.NewMobServer,
+	"db":         db.NewDbServer,
+	"chat":       chat.NewChatServer,
+	"test":       func() (server.IServer, error) { return server.NewServer(step_zero) },
+	"prime-time": func() (server.IServer, error) { return server.NewServer(step_one) },
+	"means":      func() (server.IServer, error) { return server.NewServer(step_two) },
+}
+
+func serversList() string {
+	var result []string
+	for key := range servers {
+		result = append(result, key)
+	}
+	slices.Sort(result)
+	return strings.Join(result, ", ")
 }
 
 func main() {
-	command := ""
-	{
-		should_skip := false
-		for _, cmd := range os.Args[1:] {
-			if strings.HasPrefix(cmd, "-") {
-				should_skip = true
-				continue
-			}
-			if should_skip {
-				should_skip = false
-				continue
-			}
-			command = strings.ToLower(cmd)
-			command = strings.Trim(command, " \t\n")
-			break
-		}
-	}
+	command := strings.Join(flag.Args(), " ")
 	if command == "" {
-		os.Stdout.WriteString("No command provided. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n")
-		os.Exit(0)
+		fmt.Printf("No command provided. Valid commands: [%s]\n", serversList())
+		os.Exit(1)
 	}
 
-	var s Server
+	var s server.IServer
 	var err error
-	switch command {
-	case "mob":
-		s, err = mob.NewMobServer()
-	case "db":
-		s, err = db.NewDbServer()
-	case "chat":
-		s, err = chat.NewChatServer()
-	case "test":
-		s, err = server.NewServer(step_zero)
-	case "prime-time":
-		s, err = server.NewServer(step_one)
-	case "means":
-		s, err = server.NewServer(step_two)
-	default:
-		os.Stdout.WriteString(fmt.Sprintf("Unknown command: %s. Valid commands: [\"mob\", \"chat\", \"test\", \"prime-time\", \"means\"]\n", command))
-		os.Exit(0)
+
+	if serverFunc, ok := servers[command]; ok {
+		s, err = serverFunc()
+	} else {
+		fmt.Printf("Unknown command: %s. Valid commands: [%s]\n", command, serversList())
+		os.Exit(1)
 	}
 	if err != nil {
 		log.Error().Err(err).Msg("Error creating server")

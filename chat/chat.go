@@ -3,7 +3,6 @@ package chat
 import (
 	"bufio"
 	"fmt"
-	"maps"
 	"net"
 	"regexp"
 	"strings"
@@ -31,17 +30,17 @@ type ChatServer struct {
 	}
 }
 
-func NewChatServer() (s *ChatServer, err error) {
-	s = &ChatServer{}
-	s.server, err = server.NewServer(s.HandleClient)
-	s.sessions = make(map[net.Conn]*ChatSession)
-	s.connected = make(chan net.Conn)
-	s.disconnected = make(chan net.Conn)
-	s.message = make(chan struct {
+func NewChatServer() (s server.IServer, err error) {
+	cs := &ChatServer{}
+	cs.server, err = server.NewServer(cs.HandleClient)
+	cs.sessions = make(map[net.Conn]*ChatSession)
+	cs.connected = make(chan net.Conn)
+	cs.disconnected = make(chan net.Conn)
+	cs.message = make(chan struct {
 		socket net.Conn
 		value  string
 	})
-	return
+	return cs, err
 }
 
 func (chatServer *ChatServer) Start() {
@@ -80,7 +79,7 @@ func (chatServer *ChatServer) runChatServer() {
 			} else {
 				usernameMaps[session.username] = uCounter - 1
 			}
-			for sess := range maps.Values(chatServer.sessions) {
+			for _, sess := range chatServer.sessions {
 				if sess.IsConnected() {
 					sess.writeLine(fmt.Sprintf("* %s has left the room", session.username))
 				}
@@ -104,7 +103,7 @@ func (chatServer *ChatServer) runChatServer() {
 					}
 				}
 				usernames := []string{}
-				for sess := range maps.Values(chatServer.sessions) {
+				for _, sess := range chatServer.sessions {
 					if session.socket == sess.socket || !sess.IsConnected() {
 						continue
 					}
@@ -124,7 +123,7 @@ func (chatServer *ChatServer) runChatServer() {
 				break
 			}
 
-			for sess := range maps.Values(chatServer.sessions) {
+			for _, sess := range chatServer.sessions {
 				if sess.socket == session.socket || !sess.IsConnected() {
 					continue
 				}

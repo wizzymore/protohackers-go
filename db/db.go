@@ -19,39 +19,36 @@ type DbServer struct {
 	mu     sync.RWMutex
 }
 
-func NewDbServer() (s *DbServer, err error) {
-	s = &DbServer{}
-	s.data = make(map[string]string)
-	s.server, err = server.NewUdpServer(s.HandleClient)
-	return
+func NewDbServer() (s server.IServer, err error) {
+	db := &DbServer{}
+	db.data = make(map[string]string)
+	db.server, err = server.NewUdpServer(db.HandleClient)
+	return db, err
 }
 
-func (chatServer *DbServer) Start() {
-	go chatServer.server.Start()
+func (dbServer *DbServer) Start() {
+	go dbServer.server.Start()
 }
 
-func (chatServer *DbServer) Stop() error {
-	return chatServer.server.Stop()
+func (dbServer *DbServer) Stop() error {
+	return dbServer.server.Stop()
 }
 
-func (s *DbServer) HandleClient(message string, addr net.Addr) {
-	s.server.Socket.SetWriteDeadline(time.Now().Add(10 * time.Minute))
+func (dbServer *DbServer) HandleClient(message string, addr net.Addr) {
+	dbServer.server.Socket.SetWriteDeadline(time.Now().Add(10 * time.Minute))
 	log := log.With().Str("remote_addr", addr.String()).Logger()
 
 	// Write
-	if pos := strings.Index(message, "="); pos != -1 {
-		key := message[0:pos]
-		value := message[pos+1:]
-
+	if key, value, ok := strings.Cut(message, "="); ok {
 		log.Info().Msgf("Client %s sent a insert request for `%q` of `%q`", addr.String(), key, value)
 
 		if key == "version" {
 			return
 		}
 
-		s.mu.Lock()
-		s.data[key] = value
-		s.mu.Unlock()
+		dbServer.mu.Lock()
+		dbServer.data[key] = value
+		dbServer.mu.Unlock()
 		return
 	}
 
@@ -60,9 +57,9 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 	log.Info().Msgf("Client %s sent a get request for `%q`", addr.String(), message)
 
 	if message == "delete" {
-		s.mu.Lock()
-		s.data = make(map[string]string)
-		s.mu.Unlock()
+		dbServer.mu.Lock()
+		dbServer.data = make(map[string]string)
+		dbServer.mu.Unlock()
 		return
 	}
 
@@ -70,11 +67,11 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 	if message == "version" {
 		value = VERSION
 	} else {
-		s.mu.RLock()
-		if v, ok := s.data[message]; ok {
+		dbServer.mu.RLock()
+		if v, ok := dbServer.data[message]; ok {
 			value = v
 		}
-		s.mu.RUnlock()
+		dbServer.mu.RUnlock()
 	}
 
 	b := bytes.Buffer{}
@@ -82,7 +79,7 @@ func (s *DbServer) HandleClient(message string, addr net.Addr) {
 	b.WriteString(message)
 	b.WriteRune('=')
 	b.WriteString(value)
-	n, err := s.server.Socket.WriteTo(b.Bytes(), addr)
+	n, err := dbServer.server.Socket.WriteTo(b.Bytes(), addr)
 	if err != nil {
 		log.Error().Msg("Failed to write message to socket")
 	}

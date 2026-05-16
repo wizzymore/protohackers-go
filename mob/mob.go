@@ -19,18 +19,18 @@ type MobServer struct {
 	server *server.Server
 }
 
-func NewMobServer() (s *MobServer, err error) {
-	s = &MobServer{}
-	s.server, err = server.NewServer(s.HandleClient)
-	return
+func NewMobServer() (s server.IServer, err error) {
+	mob := &MobServer{}
+	mob.server, err = server.NewServer(mob.HandleClient)
+	return mob, err
 }
 
-func (chatServer *MobServer) Start() {
-	go chatServer.server.Start()
+func (mobServer *MobServer) Start() {
+	go mobServer.server.Start()
 }
 
-func (chatServer *MobServer) Stop() error {
-	return chatServer.server.Stop()
+func (mobServer *MobServer) Stop() error {
+	return mobServer.server.Stop()
 }
 
 type message struct {
@@ -38,7 +38,7 @@ type message struct {
 	value  string
 }
 
-func (cs *MobServer) HandleClient(conn net.Conn) {
+func (mobServer *MobServer) HandleClient(conn net.Conn) {
 	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
 
 	defer func() {
@@ -47,11 +47,11 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 	}()
 
 	bogusServer, err := net.Dial("tcp", "chat.protohackers.com:16963")
-	defer bogusServer.Close()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to connect to bogus server")
 		return
 	}
+	defer bogusServer.Close()
 	messageChan := make(chan message)
 
 	regex, err := regexp.Compile("^7[a-zA-Z0-9]{25,34}$")
@@ -132,11 +132,3 @@ func (cs *MobServer) HandleClient(conn net.Conn) {
 		}
 	}
 }
-
-// func (chatSession *ChatSession) writeLine(line string) error {
-// 	chatSession.socket_m.Lock()
-// 	defer chatSession.socket_m.Unlock()
-// 	line = strings.TrimRight(line, "\n")
-// 	_, err := chatSession.socket.Write(fmt.Appendf(nil, "%s\n", line))
-// 	return err
-// }

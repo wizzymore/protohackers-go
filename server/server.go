@@ -8,6 +8,11 @@ import (
 
 type Handler func(conn net.Conn)
 
+type IServer interface {
+	Start()
+	Stop() error
+}
+
 type Server struct {
 	Running          bool
 	Listener         net.Listener
