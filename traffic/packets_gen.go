@@ -3,53 +3,54 @@
 package traffic
 
 import (
-    "encoding/binary"
 	"bytes"
-    "io"
+	"encoding/binary"
 	"fmt"
+	"io"
 )
-
 
 func (p *Camera) Marshal(opCode byte) []byte {
 	b := bytes.Buffer{}
 	_ = b.WriteByte(opCode)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Road)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Mile)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.limit)
-    
-    return b.Bytes()
+
+	return b.Bytes()
 }
+
 func (p *Camera) Unmarshal(r io.Reader) error {
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Road); err != nil {
-        return fmt.Errorf("Could not read uint16 for Road: %w", err)
-    }
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Mile); err != nil {
-        return fmt.Errorf("Could not read uint16 for Mile: %w", err)
-    }
-    
-    if err := binary.Read(r, binary.BigEndian, &p.limit); err != nil {
-        return fmt.Errorf("Could not read uint16 for limit: %w", err)
-    }
-    
-    return nil
+
+	if err := binary.Read(r, binary.BigEndian, &p.Road); err != nil {
+		return fmt.Errorf("Could not read uint16 for Road: %w", err)
+	}
+
+	if err := binary.Read(r, binary.BigEndian, &p.Mile); err != nil {
+		return fmt.Errorf("Could not read uint16 for Mile: %w", err)
+	}
+
+	if err := binary.Read(r, binary.BigEndian, &p.limit); err != nil {
+		return fmt.Errorf("Could not read uint16 for limit: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Dispatcher) Marshal(opCode byte) []byte {
 	b := bytes.Buffer{}
 	_ = b.WriteByte(opCode)
-    
+
 	_ = b.WriteByte(byte(len(p.Roads)))
 	_ = binary.Write(&b, binary.BigEndian, p.Roads)
-    
-    return b.Bytes()
+
+	return b.Bytes()
 }
+
 func (p *Dispatcher) Unmarshal(r io.Reader) error {
-    
+
 	{
 		var lengthByte [1]byte
 		if _, err := r.Read(lengthByte[:]); err != nil {
@@ -64,21 +65,22 @@ func (p *Dispatcher) Unmarshal(r io.Reader) error {
 		}
 		p.Roads = buf
 	}
-    
-    return nil
+
+	return nil
 }
 
 func (p *Error) Marshal(opCode byte) []byte {
 	b := bytes.Buffer{}
 	_ = b.WriteByte(opCode)
-    
+
 	_ = b.WriteByte(byte(len(p.Message)))
 	_, _ = b.WriteString(p.Message)
-    
-    return b.Bytes()
+
+	return b.Bytes()
 }
+
 func (p *Error) Unmarshal(r io.Reader) error {
-    
+
 	{
 		var lengthByte [1]byte
 		if _, err := r.Read(lengthByte[:]); err != nil {
@@ -91,23 +93,24 @@ func (p *Error) Unmarshal(r io.Reader) error {
 		}
 		p.Message = string(buf)
 	}
-    
-    return nil
+
+	return nil
 }
 
 func (p *Plate) Marshal(opCode byte) []byte {
 	b := bytes.Buffer{}
 	_ = b.WriteByte(opCode)
-    
+
 	_ = b.WriteByte(byte(len(p.Plate)))
 	_, _ = b.WriteString(p.Plate)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Timestamp)
-    
-    return b.Bytes()
+
+	return b.Bytes()
 }
+
 func (p *Plate) Unmarshal(r io.Reader) error {
-    
+
 	{
 		var lengthByte [1]byte
 		if _, err := r.Read(lengthByte[:]); err != nil {
@@ -120,37 +123,38 @@ func (p *Plate) Unmarshal(r io.Reader) error {
 		}
 		p.Plate = string(buf)
 	}
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Timestamp); err != nil {
-        return fmt.Errorf("Could not read uint32 for Timestamp: %w", err)
-    }
-    
-    return nil
+
+	if err := binary.Read(r, binary.BigEndian, &p.Timestamp); err != nil {
+		return fmt.Errorf("Could not read uint32 for Timestamp: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Ticket) Marshal(opCode byte) []byte {
 	b := bytes.Buffer{}
 	_ = b.WriteByte(opCode)
-    
+
 	_ = b.WriteByte(byte(len(p.Plate)))
 	_, _ = b.WriteString(p.Plate)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Road)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Mile1)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Timestamp1)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Mile2)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Timestamp2)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Speed)
-    
-    return b.Bytes()
+
+	return b.Bytes()
 }
+
 func (p *Ticket) Unmarshal(r io.Reader) error {
-    
+
 	{
 		var lengthByte [1]byte
 		if _, err := r.Read(lengthByte[:]); err != nil {
@@ -163,58 +167,60 @@ func (p *Ticket) Unmarshal(r io.Reader) error {
 		}
 		p.Plate = string(buf)
 	}
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Road); err != nil {
-        return fmt.Errorf("Could not read uint16 for Road: %w", err)
-    }
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Mile1); err != nil {
-        return fmt.Errorf("Could not read uint16 for Mile1: %w", err)
-    }
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Timestamp1); err != nil {
-        return fmt.Errorf("Could not read uint32 for Timestamp1: %w", err)
-    }
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Mile2); err != nil {
-        return fmt.Errorf("Could not read uint16 for Mile2: %w", err)
-    }
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Timestamp2); err != nil {
-        return fmt.Errorf("Could not read uint32 for Timestamp2: %w", err)
-    }
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Speed); err != nil {
-        return fmt.Errorf("Could not read uint16 for Speed: %w", err)
-    }
-    
-    return nil
+
+	if err := binary.Read(r, binary.BigEndian, &p.Road); err != nil {
+		return fmt.Errorf("Could not read uint16 for Road: %w", err)
+	}
+
+	if err := binary.Read(r, binary.BigEndian, &p.Mile1); err != nil {
+		return fmt.Errorf("Could not read uint16 for Mile1: %w", err)
+	}
+
+	if err := binary.Read(r, binary.BigEndian, &p.Timestamp1); err != nil {
+		return fmt.Errorf("Could not read uint32 for Timestamp1: %w", err)
+	}
+
+	if err := binary.Read(r, binary.BigEndian, &p.Mile2); err != nil {
+		return fmt.Errorf("Could not read uint16 for Mile2: %w", err)
+	}
+
+	if err := binary.Read(r, binary.BigEndian, &p.Timestamp2); err != nil {
+		return fmt.Errorf("Could not read uint32 for Timestamp2: %w", err)
+	}
+
+	if err := binary.Read(r, binary.BigEndian, &p.Speed); err != nil {
+		return fmt.Errorf("Could not read uint16 for Speed: %w", err)
+	}
+
+	return nil
 }
 
 func (p *WantHeartbeat) Marshal(opCode byte) []byte {
 	b := bytes.Buffer{}
 	_ = b.WriteByte(opCode)
-    
+
 	_ = binary.Write(&b, binary.BigEndian, p.Interval)
-    
-    return b.Bytes()
+
+	return b.Bytes()
 }
+
 func (p *WantHeartbeat) Unmarshal(r io.Reader) error {
-    
-    if err := binary.Read(r, binary.BigEndian, &p.Interval); err != nil {
-        return fmt.Errorf("Could not read uint32 for Interval: %w", err)
-    }
-    
-    return nil
+
+	if err := binary.Read(r, binary.BigEndian, &p.Interval); err != nil {
+		return fmt.Errorf("Could not read uint32 for Interval: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Heartbeat) Marshal(opCode byte) []byte {
 	b := bytes.Buffer{}
 	_ = b.WriteByte(opCode)
-    
-    return b.Bytes()
+
+	return b.Bytes()
 }
+
 func (p *Heartbeat) Unmarshal(r io.Reader) error {
-    
-    return nil
+
+	return nil
 }
