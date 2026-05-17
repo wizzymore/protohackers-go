@@ -2,23 +2,27 @@ package db_test
 
 import (
 	"bufio"
+	"bytes"
 	"math/rand"
 	"net"
-	"slices"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/wizzymore/tcp-go/db"
 )
 
 func init() {
+	log.Logger = zerolog.New(&bytes.Buffer{})
 	s, _ := db.NewDbServer()
 	s.Start()
 }
 
 func TestCanSetValue(t *testing.T) {
-	t.Parallel()
 	conn, err := net.Dial("udp", "localhost:8081")
 	if err != nil {
 		t.Error("Could not dial", err)
@@ -28,20 +32,13 @@ func TestCanSetValue(t *testing.T) {
 	conn.Write([]byte("foo"))
 	scanner := bufio.NewScanner(conn)
 
-	conn.SetReadDeadline(time.Now().Add(time.Second))
-	if !scanner.Scan() {
-		t.Errorf("Could not read from the server")
-		t.FailNow()
-	}
+	conn.SetReadDeadline(time.Now().Add(time.Millisecond * 200))
+	require.True(t, scanner.Scan(), "Could not read from the server")
 
-	if slices.Compare(scanner.Bytes(), []byte("foo=123")) != 0 {
-		t.Errorf("Did not set value correctly, got: %s", scanner.Bytes())
-		t.FailNow()
-	}
+	assert.Equal(t, []byte("foo=123"), scanner.Bytes(), "Did not set value correctly")
 }
 
 func TestCanReadUnsetValue(t *testing.T) {
-	t.Parallel()
 	conn, err := net.Dial("udp", "localhost:8081")
 	if err != nil {
 		t.Error("Could not dial", err)
@@ -51,20 +48,13 @@ func TestCanReadUnsetValue(t *testing.T) {
 	conn.Write([]byte(rand_num))
 	scanner := bufio.NewScanner(conn)
 
-	conn.SetReadDeadline(time.Now().Add(time.Second))
-	if !scanner.Scan() {
-		t.Errorf("Could not read from the server")
-		t.FailNow()
-	}
+	conn.SetReadDeadline(time.Now().Add(time.Millisecond * 200))
+	require.True(t, scanner.Scan(), "Could not read from the server")
 
-	if slices.Compare(scanner.Bytes(), []byte(rand_num+"=")) != 0 {
-		t.Errorf("Did not set value correctly, got: %s", scanner.Bytes())
-		t.FailNow()
-	}
+	assert.Equal(t, []byte(rand_num+"="), scanner.Bytes(), "Did not set value correctly")
 }
 
 func TestCantChangeVersion(t *testing.T) {
-	t.Parallel()
 	conn, err := net.Dial("udp", "localhost:8081")
 	if err != nil {
 		t.Error("Could not dial", err)
@@ -73,15 +63,9 @@ func TestCantChangeVersion(t *testing.T) {
 	conn.Write([]byte("version=123"))
 	conn.Write([]byte("version"))
 	scanner := bufio.NewScanner(conn)
-	conn.SetReadDeadline(time.Now().Add(time.Second))
-	if !scanner.Scan() {
-		t.Errorf("Could not read from the server")
-		t.FailNow()
-	}
+	conn.SetReadDeadline(time.Now().Add(time.Millisecond * 200))
+	require.True(t, scanner.Scan(), "Could not read from the server")
 
-	version := scanner.Text()
-	if version == "123" {
-		t.Errorf("Did not set value correctly, got: %s", version)
-		t.FailNow()
-	}
+	assert.NotEqual(t, "version=123", scanner.Text(), "Did not set value correctly")
+	assert.Equal(t, "version=alpha", scanner.Text(), "Did not set value correctly")
 }
