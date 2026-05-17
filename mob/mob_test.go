@@ -21,17 +21,18 @@ func TestServer(t *testing.T) {
 	// Initialize protohackers mock server
 	server, err := net.Listen("tcp", ":16963")
 	require.NoError(t, err, "Could not create bogus server")
+	defer server.Close();
 
 	// Initialize our proxy server
 	proxyServer, err := mob.NewMobServer("127.0.0.1:16963")
 	require.NoError(t, err, "Could not create mob server")
-
 	go proxyServer.Start()
 	defer proxyServer.Stop()
 
 	// Connect client_con to proxy
 	client_con, err := net.Dial("tcp", ":8081")
 	require.NoError(t, err, "Could not connect to mob server")
+	defer client_con.Close()
 
 	// Accept the connection from the proxy on behalf of the client
 	server_conn, err := server.Accept()
