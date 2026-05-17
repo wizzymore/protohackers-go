@@ -16,11 +16,17 @@ import (
 const BOGUS string = "7YWHMfk9JZe0LM0g1ZauHuiSxhI"
 
 type MobServer struct {
-	server *server.Server
+	server       *server.Server
+	proxyAddress string
 }
 
-func NewMobServer() (s server.IServer, err error) {
+func NewMobServer(proxyAddress ...string) (s server.IServer, err error) {
 	mob := &MobServer{}
+	if len(proxyAddress) == 0 {
+		mob.proxyAddress = "chat.protohackers.com:16963"
+	} else {
+		mob.proxyAddress = proxyAddress[0]
+	}
 	mob.server, err = server.NewServer(mob.HandleClient)
 	return mob, err
 }
@@ -39,14 +45,17 @@ type message struct {
 }
 
 func (mobServer *MobServer) HandleClient(conn net.Conn) {
-	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
+	log := log.With().
+		Str("service", "mob").
+		Str("remote_addr", conn.RemoteAddr().String()).Logger()
 
 	defer func() {
 		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
 		conn.Close()
 	}()
 
-	bogusServer, err := net.Dial("tcp", "chat.protohackers.com:16963")
+	log.Info().Msg("Dialing proxy server")
+	bogusServer, err := net.Dial("tcp", mobServer.proxyAddress)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to connect to bogus server")
 		return

@@ -31,7 +31,7 @@ func init() {
 type ServerFunc func() (server.IServer, error)
 
 var servers = map[string]ServerFunc{
-	"mob":        mob.NewMobServer,
+	"mob":        func() (server.IServer, error) { return mob.NewMobServer() },
 	"db":         db.NewDbServer,
 	"chat":       chat.NewChatServer,
 	"test":       func() (server.IServer, error) { return server.NewServer(step_zero) },
