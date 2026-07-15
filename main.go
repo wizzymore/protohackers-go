@@ -36,7 +36,7 @@ type ServerFunc func() (server.Server, error)
 
 var servers = map[string]ServerFunc{
 	"mob":        func() (server.Server, error) { return mob.NewMobServer() },
-	"db":         func() (server.Server, error) { return db.NewDbServer(false) },
+	"db":         db.NewDbServer,
 	"chat":       chat.NewChatServer,
 	"test":       func() (server.Server, error) { return server.NewTCPServer(smoke_test.Handler) },
 	"prime-time": func() (server.Server, error) { return server.NewTCPServer(primetime.Handler) },

@@ -1,68 +1,127 @@
 package server
 
 import (
+	"errors"
 	"net"
+	"os"
+	"slices"
+	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-type UDPHandler func(string, net.Addr)
+const MAX_DATAGRAM_PACKET = 65_536
+const MAX_DATAGRAM_SIZE = 65_507
+
+type UDPHandler func(c *UDPClient) error
 
 type UDPServer struct {
-	Running          bool
-	Socket           *net.UDPConn
-	Sync             bool
+	Socket           net.PacketConn
 	handleConnection UDPHandler
+	timeout          time.Duration
 }
 
-func NewBaseUDPServer(handler UDPHandler, bindAddr ...string) (s *UDPServer, err error) {
-	s = &UDPServer{}
-	bind := ":8000"
-	if len(bindAddr) > 0 {
-		bind = bindAddr[0]
+type UDPClient struct {
+	Msgs   chan []byte
+	Logger zerolog.Logger
+
+	conn         net.PacketConn
+	addr         net.Addr
+	lastActivity time.Time
+}
+
+func (self *UDPClient) Write(p []byte) (err error) {
+	if len(p) > MAX_DATAGRAM_SIZE {
+		return errors.New("UDP message too large")
 	}
-	addr, err := net.ResolveUDPAddr("udp", bind)
+	self.conn.SetWriteDeadline(time.Now().Add(time.Second * 10))
+	n, err := self.conn.WriteTo(p, self.addr)
 	if err != nil {
+		return err
+	}
+	if n != len(p) {
+		return errors.New("UDP message only partially sent")
+	}
+	return nil
+}
+
+func NewBaseUDPServer(handler UDPHandler, timeout time.Duration, bindAddr ...string) (s *UDPServer, err error) {
+	s = &UDPServer{}
+	addr := ":8000"
+	if len(bindAddr) > 0 {
+		addr = bindAddr[0]
+	}
+	if s.Socket, err = net.ListenPacket("udp", addr); err != nil {
 		return
 	}
-	if s.Socket, err = net.ListenUDP("udp", addr); err != nil {
-		return
-	}
+	s.timeout = timeout
 	s.handleConnection = handler
 	return
 }
 
-func (s *UDPServer) Start() {
-	addr := s.Socket.LocalAddr()
+func (self *UDPServer) Start() {
+	addr := self.Socket.LocalAddr()
 	log.Info().Msgf("server started on %s", addr.String())
-	if s.Sync {
-		log.Info().Msg("server running in sync")
-	}
+
+	buf := make([]byte, MAX_DATAGRAM_PACKET)
+	clients := make(map[string]*UDPClient)
 	for {
-		// This will only read 512 bytes whatever i do to it
-		buf := make([]byte, 1000)
-		n, addr, err := s.Socket.ReadFromUDP(buf)
+		deadline := time.Time{}
+		deadline_addr := ""
+
+		for addr, c := range clients {
+			t := c.lastActivity.Add(self.timeout)
+			if deadline_addr == "" || t.Compare(deadline) == -1 {
+				deadline = t
+				deadline_addr = addr
+			}
+		}
+
+		self.Socket.SetReadDeadline(deadline)
+		n, addr, err := self.Socket.ReadFrom(buf)
 		if err != nil {
-			if !s.Running {
+			if errors.Is(err, net.ErrClosed) {
 				return
 			}
-
-			log.Error().Err(err).Msg("error reading from socket")
-			continue
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				clients[deadline_addr].Logger.Debug().Msg("client timeout reached")
+				close(clients[deadline_addr].Msgs)
+				delete(clients, deadline_addr)
+				continue
+			}
+			log.Fatal().Err(err).Msg("could not read from UDP socket")
 		}
 
-		log.Info().Msgf("Received %d bytes from %s", n, addr.String())
-
-		if s.Sync {
-			go s.handleConnection(string(buf[:n]), addr)
-		} else {
-			s.handleConnection(string(buf[:n]), addr)
+		connection_id := addr.String()
+		c, has := clients[connection_id]
+		if !has {
+			c = &UDPClient{
+				Msgs:         make(chan []byte),
+				Logger:       log.With().Str("addr", connection_id).Logger(),
+				conn:         self.Socket,
+				addr:         addr,
+				lastActivity: time.Now(),
+			}
+			clients[connection_id] = c
+			go func(c *UDPClient) {
+				c.Logger.Info().Msg("client connected")
+				err := self.handleConnection(c)
+				if err != nil {
+					c.Logger.Err(err).Msg("client did not handle ok")
+				} else {
+					c.Logger.Info().Msg("client done - timed out")
+				}
+			}(c)
 		}
+
+		c.lastActivity = time.Now()
+		c.Logger.Debug().Str("last_activity", c.lastActivity.Format("15:04:05")).Msgf("client sent %d bytes", n)
+		c.Msgs <- slices.Clone(buf[:n])
 	}
 }
 
 func (s *UDPServer) Stop() error {
-	s.Running = false
 	if err := s.Socket.Close(); err != nil {
 		return err
 	}

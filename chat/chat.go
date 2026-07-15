@@ -6,7 +6,6 @@ import (
 	"net"
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/server"
@@ -14,7 +13,6 @@ import (
 
 type ChatSession struct {
 	socket   net.Conn
-	socket_m sync.RWMutex
 	username string
 }
 
@@ -167,8 +165,6 @@ func (chatSession *ChatSession) IsConnected() bool {
 }
 
 func (chatSession *ChatSession) writeLine(line string) error {
-	chatSession.socket_m.Lock()
-	defer chatSession.socket_m.Unlock()
 	line = strings.TrimRight(line, "\n")
 	_, err := chatSession.socket.Write(fmt.Appendf(nil, "%s\n", line))
 	return err

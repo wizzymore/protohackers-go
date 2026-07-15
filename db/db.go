@@ -2,7 +2,7 @@ package db
 
 import (
 	"bytes"
-	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,106 +23,109 @@ type ReadEvent struct {
 type DeleteEvent struct{}
 type StopEvent struct{}
 
-type DbServer struct {
-	server *server.UDPServer
-	c      chan any
-}
+func NewDbServer() (s server.Server, err error) {
+	ch := make(chan any, 128)
 
-func NewDbServer(sync bool, bindAddr ...string) (s server.Server, err error) {
-	db := &DbServer{}
-	addr := ":8000"
-	if len(bindAddr) > 0 {
-		addr = bindAddr[0]
-	}
-	s = db
-	db.server, err = server.NewBaseUDPServer(db.HandleClient, addr)
+	s, err = server.NewBaseUDPServer(func(c *server.UDPClient) error {
+		return handleClient(c, ch)
+	}, time.Second)
+
 	if err != nil {
 		return
 	}
-	db.server.Sync = sync
-	db.c = make(chan any, 32)
-	go db.startServer()
+
+	go startServer(ch)
+
 	return
 }
 
-func (self *DbServer) Start() {
-	go self.server.Start()
+func endsWithCRLF(s []byte) bool {
+	return len(s) >= 2 && slices.Equal(s[len(s)-2:], []byte{'\r', '\n'})
 }
 
-func (self *DbServer) Stop() error {
-	self.c <- StopEvent{}
-	return self.server.Stop()
+func sanitize(s string) string {
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	if len(s) > 100 {
+		s = s[:100] + "...(truncated)"
+	}
+	return s
 }
 
-func endsWithCRLF(s string) bool {
-	return len(s) >= 2 && s[len(s)-2:] == "\r\n"
-}
+func handleClient(c *server.UDPClient, ch chan any) error {
+	// Buffer helper for building responses
+	b := bytes.Buffer{}
+	for {
+		message, ok := <-c.Msgs
+		if !ok {
+			break
+		}
+		had_crlf := endsWithCRLF(message)
 
-func (self *DbServer) HandleClient(message string, addr net.Addr) {
-	self.server.Socket.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	log := log.With().Str("remote_addr", addr.String()).Logger()
-	had_crlf := endsWithCRLF(message)
+		// Write
+		i := slices.Index(message, '=')
+		if i != -1 {
+			key := string(message[:i])
+			value := string(message[i+1:])
+			c.Logger.Info().Msgf("client sent a insert request for `%s` of `%s`", key, sanitize(value))
 
-	// Write
-	if key, value, ok := strings.Cut(message, "="); ok {
-		log.Info().Msgf("client %s sent a insert request for `%s` of `%s`", addr.String(), key, value)
+			if key == "version" {
+				c.Logger.Debug().Msg("skipped insert of version value")
+				continue
+			}
 
-		if key == "version" {
-			return
+			ch <- WriteEvent{key, value}
+			continue
 		}
 
-		self.c <- WriteEvent{key, value}
-		return
+		// Read
+
+		key := string(message)
+		log.Info().Msgf("client sent a get request for `%s`", key)
+
+		if key == "delete" {
+			ch <- DeleteEvent{}
+			continue
+		}
+
+		var value string
+		if key == "version" {
+			value = VERSION
+		} else {
+			out := make(chan string, 1)
+			ch <- ReadEvent{key, out}
+			value = <-out
+		}
+
+		payloadSize := len(message) + len("=") + len(value)
+		if had_crlf {
+			payloadSize += 2
+		}
+		b.Reset()
+		b.Grow(payloadSize)
+		b.Write(message)
+		b.WriteByte('=')
+		b.WriteString(value)
+		if had_crlf {
+			b.Write([]byte{'\r', '\n'})
+		}
+		if err := c.Write(b.Bytes()); err != nil {
+			return err
+		}
 	}
 
-	// Read
-
-	log.Info().Msgf("Client %s sent a get request for `%s`", addr.String(), message)
-
-	if message == "delete" {
-		self.c <- DeleteEvent{}
-		return
-	}
-
-	value := ""
-	if message == "version" {
-		value = VERSION
-	} else {
-		out := make(chan string, 1)
-		self.c <- ReadEvent{key: message, out: out}
-		value = <-out
-	}
-
-	b := bytes.Buffer{}
-	payloadSize := len(message) + len("=") + len(value)
-	if had_crlf {
-		payloadSize += 2
-	}
-	b.Grow(payloadSize)
-	b.WriteString(message)
-	b.WriteByte('=')
-	b.WriteString(value)
-	if had_crlf {
-		b.WriteString("\r\n")
-	}
-	payload := b.Bytes()
-	// Write payload limited to 1000 bytes per protohackers requirement
-	n, err := self.server.Socket.WriteTo(payload[:min(len(payload), 1000)], addr)
-	if err != nil {
-		log.Err(err).Msg("failed to write message to socket")
-	}
-	log.Info().Str("value", value).Msgf("Wrote %d bytes to socket", n)
+	return nil
 }
 
-func (self DbServer) startServer() {
+func startServer(c chan any) {
 	data := make(map[string]string)
 	for {
-		message, ok := <-self.c
+		message, ok := <-c
 		if !ok {
 			return
 		}
 		switch m := message.(type) {
 		case StopEvent:
+			log.Info().Msg("Database handling server shutdown")
 			return
 		case WriteEvent:
 			data[m.key] = m.value

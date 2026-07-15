@@ -4,16 +4,24 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
+	"io"
 	"net"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/server"
 )
 
 const BOGUS string = "7YWHMfk9JZe0LM0g1ZauHuiSxhI"
+
+type messageSource int
+
+const (
+	FROM_CLIENT messageSource = iota
+	FROM_PROXY
+)
 
 type MobServer struct {
 	server       *server.TCPServer
@@ -40,7 +48,7 @@ func (mobServer *MobServer) Stop() error {
 }
 
 type message struct {
-	socket net.Conn
+	source messageSource
 	value  string
 }
 
@@ -50,94 +58,133 @@ func (mobServer *MobServer) HandleClient(conn net.Conn) {
 		Str("remote_addr", conn.RemoteAddr().String()).Logger()
 
 	defer func() {
-		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
+		log.Info().Msg("closing the client connection")
 		conn.Close()
 	}()
 
-	log.Info().Msg("Dialing proxy server")
+	log.Debug().Msg("Dialing proxy server")
 	bogusServer, err := net.Dial("tcp", mobServer.proxyAddress)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to connect to bogus server")
+		log.Error().Err(err).Msg("failed to connect to the proxy server")
 		return
 	}
 	defer bogusServer.Close()
-	messageChan := make(chan message)
+	proxyLog := log.With().Str("proxy_addr", bogusServer.LocalAddr().String()).Logger()
+	proxyLog.Info().Msg("Connected to the proxy server")
 
-	regex, err := regexp.Compile("^7[a-zA-Z0-9]{25,34}$")
+	// Communication channel between the proxy and our client
+	messageChan := make(chan message, 32)
+
+	ctx, ctx_cancel := context.WithCancel(context.Background())
+	defer ctx_cancel()
+
+	// Proxy communication handler
+	go func() {
+		proxyReader := bufio.NewReader(bogusServer)
+		for {
+			select {
+			case <-ctx.Done():
+				proxyLog.Debug().Err(ctx.Err()).Msg("stopping proxy handler - context closed")
+				return
+			default:
+			}
+
+			text, err := proxyReader.ReadString('\n')
+			if err != nil {
+				if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+					proxyLog.Error().Err(err).Msg("could not read from proxy server")
+				} else if errors.Is(err, io.EOF) {
+					proxyLog.Info().Msg("proxy server closed the connection")
+				}
+				ctx_cancel()
+				return
+			}
+			text = strings.TrimSpace(text)
+
+			proxyLog.Debug().Str("msg", text).Msg("received a new message from the proxy")
+
+			messageChan <- message{
+				source: FROM_PROXY,
+				value:  text,
+			}
+		}
+	}()
+
+	// Client communication handler
+	go func() {
+		clientReader := bufio.NewReader(conn)
+		for {
+			select {
+			case <-ctx.Done():
+				log.Debug().Err(ctx.Err()).Msg("stopping client handler - context closed")
+				return
+			default:
+			}
+
+			text, err := clientReader.ReadString('\n')
+			if err != nil {
+				if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+					log.Error().Err(err).Msg("could not read from client")
+				} else if errors.Is(err, io.EOF) {
+					log.Info().Msg("client closed the connection")
+				}
+				ctx_cancel()
+				return
+			}
+			text = strings.TrimSpace(text)
+
+			log.Debug().Str("msg", text).Msg("received a new message from the client")
+
+			messageChan <- message{
+				source: FROM_CLIENT,
+				value:  text,
+			}
+		}
+	}()
+
+	regex, err := regexp.Compile(`^7[a-zA-Z0-9]{25,34}$`)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to compile regex")
 		return
 	}
-	ctx, ctx_cancel := context.WithCancel(context.Background())
-	defer ctx_cancel()
 
-	go func() {
-		reader := bufio.NewReader(bogusServer)
-		for {
-			select {
-			case <-ctx.Done():
-				log.Debug().Msg("Context done in bogus server reader")
-				return
-			default:
-			}
-
-			text, err := reader.ReadString('\n')
-			if err != nil {
-				if !errors.Is(err, net.ErrClosed) {
-					log.Error().Err(err).Msg("Error reading from bogus server")
-				}
-				ctx_cancel()
-				return
-			}
-
-			messageChan <- message{
-				socket: conn,
-				value:  text,
-			}
-		}
-	}()
-
-	go func() {
-		reader := bufio.NewReader(conn)
-		for {
-			select {
-			case <-ctx.Done():
-				log.Debug().Msg("Context done in client reader")
-				return
-			default:
-			}
-
-			text, err := reader.ReadString('\n')
-			if err != nil {
-				ctx_cancel()
-				return
-			}
-
-			messageChan <- message{
-				socket: bogusServer,
-				value:  text,
-			}
-		}
-	}()
-
+	proxyWriter := bufio.NewWriter(bogusServer)
+	clientWriter := bufio.NewWriter(conn)
 	for {
 		select {
 		case <-ctx.Done():
-			log.Debug().Msg("Context done in main select")
+			log.Debug().Err(ctx.Err()).Msg("Context done in main select")
 			return
 		case msg := <-messageChan:
-			splits := strings.Split(strings.TrimSpace(msg.value), " ")
-			for i, split := range splits {
-				if regex.MatchString(split) {
-					splits[i] = BOGUS
+			words := strings.FieldsFunc(msg.value, func(r rune) bool {
+				return unicode.IsSpace(r)
+			})
+			for i, word := range words {
+				if regex.MatchString(word) {
+					words[i] = BOGUS
 				}
 			}
+			msg.value = strings.Join(words, " ")
 
-			_, err = msg.socket.Write(fmt.Appendf(nil, "%s\n", strings.Join(splits, " ")))
+			var writer *bufio.Writer
+			switch msg.source {
+			case FROM_CLIENT:
+				writer = proxyWriter
+			case FROM_PROXY:
+				writer = clientWriter
+			}
+
+			_, err = writer.WriteString(msg.value)
 			if err != nil {
 				log.Error().Err(err).Msg("Error writing to client")
 				return
 			}
+			_, err = writer.WriteRune('\n')
+			if err != nil {
+				log.Error().Err(err).Msg("Error writing to client")
+				return
+			}
+			err = writer.Flush()
 		}
 	}
 }
