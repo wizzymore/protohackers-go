@@ -2,22 +2,17 @@ package mob_test
 
 import (
 	"bufio"
-	"bytes"
 	"net"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzymore/tcp-go/mob"
 )
 
 func TestServer(t *testing.T) {
-	log.Logger = zerolog.New(&bytes.Buffer{})
-
 	// Initialize protohackers mock server
 	server, err := net.Listen("tcp", ":16963")
 	require.NoError(t, err, "Could not create bogus server")

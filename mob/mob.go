@@ -10,7 +10,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/server"
 )
 
@@ -39,12 +38,12 @@ func NewMobServer(proxyAddress ...string) (s server.Server, err error) {
 	return mob, err
 }
 
-func (mobServer *MobServer) Start() {
-	go mobServer.server.Start()
+func (self *MobServer) Start() {
+	go self.server.Start()
 }
 
-func (mobServer *MobServer) Stop() error {
-	return mobServer.server.Stop()
+func (self *MobServer) Stop() error {
+	return self.server.Stop()
 }
 
 type message struct {
@@ -52,24 +51,17 @@ type message struct {
 	value  string
 }
 
-func (mobServer *MobServer) HandleClient(conn net.Conn) {
-	log := log.With().
-		Str("service", "mob").
-		Str("remote_addr", conn.RemoteAddr().String()).Logger()
+func (self *MobServer) HandleClient(c *server.TCPClient) error {
+	c.Logger = c.Logger.With().Str("service", "mob").Logger()
 
-	defer func() {
-		log.Info().Msg("closing the client connection")
-		conn.Close()
-	}()
-
-	log.Debug().Msg("Dialing proxy server")
-	bogusServer, err := net.Dial("tcp", mobServer.proxyAddress)
+	c.Logger.Debug().Msg("Dialing proxy server")
+	bogusServer, err := net.Dial("tcp", self.proxyAddress)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to connect to the proxy server")
-		return
+		return errors.Join(err, errors.New("failted to connect to the proxy server"))
 	}
 	defer bogusServer.Close()
-	proxyLog := log.With().Str("proxy_addr", bogusServer.LocalAddr().String()).Logger()
+
+	proxyLog := c.Logger.With().Str("proxy_addr", bogusServer.LocalAddr().String()).Logger()
 	proxyLog.Info().Msg("Connected to the proxy server")
 
 	// Communication channel between the proxy and our client
@@ -112,11 +104,11 @@ func (mobServer *MobServer) HandleClient(conn net.Conn) {
 
 	// Client communication handler
 	go func() {
-		clientReader := bufio.NewReader(conn)
+		clientReader := bufio.NewReader(c)
 		for {
 			select {
 			case <-ctx.Done():
-				log.Debug().Err(ctx.Err()).Msg("stopping client handler - context closed")
+				c.Logger.Debug().Err(ctx.Err()).Msg("stopping client handler - context closed")
 				return
 			default:
 			}
@@ -124,16 +116,16 @@ func (mobServer *MobServer) HandleClient(conn net.Conn) {
 			text, err := clientReader.ReadString('\n')
 			if err != nil {
 				if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-					log.Error().Err(err).Msg("could not read from client")
+					c.Logger.Error().Err(err).Msg("could not read from client")
 				} else if errors.Is(err, io.EOF) {
-					log.Info().Msg("client closed the connection")
+					c.Logger.Info().Msg("client closed the connection")
 				}
 				ctx_cancel()
 				return
 			}
 			text = strings.TrimSpace(text)
 
-			log.Debug().Str("msg", text).Msg("received a new message from the client")
+			c.Logger.Debug().Str("msg", text).Msg("received a new message from the client")
 
 			messageChan <- message{
 				source: FROM_CLIENT,
@@ -144,17 +136,17 @@ func (mobServer *MobServer) HandleClient(conn net.Conn) {
 
 	regex, err := regexp.Compile(`^7[a-zA-Z0-9]{25,34}$`)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to compile regex")
-		return
+		return err
 	}
 
 	proxyWriter := bufio.NewWriter(bogusServer)
-	clientWriter := bufio.NewWriter(conn)
+	clientWriter := bufio.NewWriter(c)
+loop:
 	for {
 		select {
 		case <-ctx.Done():
-			log.Debug().Err(ctx.Err()).Msg("Context done in main select")
-			return
+			c.Logger.Debug().Err(ctx.Err()).Msg("Context done in main select")
+			break loop
 		case msg := <-messageChan:
 			words := strings.FieldsFunc(msg.value, func(r rune) bool {
 				return unicode.IsSpace(r)
@@ -176,15 +168,15 @@ func (mobServer *MobServer) HandleClient(conn net.Conn) {
 
 			_, err = writer.WriteString(msg.value)
 			if err != nil {
-				log.Error().Err(err).Msg("Error writing to client")
-				return
+				return err
 			}
 			_, err = writer.WriteRune('\n')
 			if err != nil {
-				log.Error().Err(err).Msg("Error writing to client")
-				return
+				return err
 			}
 			err = writer.Flush()
 		}
 	}
+
+	return nil
 }

@@ -80,7 +80,7 @@ func handleClient(c *server.UDPClient, ch chan any) error {
 		// Read
 
 		key := string(message)
-		log.Info().Msgf("client sent a get request for `%s`", key)
+		c.Logger.Info().Msgf("client sent a get request for `%s`", key)
 
 		if key == "delete" {
 			ch <- DeleteEvent{}

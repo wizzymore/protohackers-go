@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"regexp"
@@ -12,32 +13,31 @@ import (
 )
 
 type ChatSession struct {
-	socket   net.Conn
+	client   *server.TCPClient
 	username string
+}
+
+type message struct {
+	client *server.TCPClient
+	value  string
 }
 
 type ChatServer struct {
 	server   *server.TCPServer
-	sessions map[net.Conn]*ChatSession
+	sessions map[*server.TCPClient]*ChatSession
 
-	connected    chan net.Conn
-	disconnected chan net.Conn
-	message      chan struct {
-		socket net.Conn
-		value  string
-	}
+	connected    chan *server.TCPClient
+	disconnected chan *server.TCPClient
+	message      chan message
 }
 
 func NewChatServer() (s server.Server, err error) {
 	cs := &ChatServer{}
 	cs.server, err = server.NewTCPServer(cs.HandleClient)
-	cs.sessions = make(map[net.Conn]*ChatSession)
-	cs.connected = make(chan net.Conn)
-	cs.disconnected = make(chan net.Conn)
-	cs.message = make(chan struct {
-		socket net.Conn
-		value  string
-	})
+	cs.sessions = make(map[*server.TCPClient]*ChatSession)
+	cs.connected = make(chan *server.TCPClient)
+	cs.disconnected = make(chan *server.TCPClient)
+	cs.message = make(chan message)
 	return cs, err
 }
 
@@ -52,22 +52,22 @@ func (chatServer *ChatServer) Stop() error {
 }
 
 func (chatServer *ChatServer) runChatServer() {
-	log := log.With().Str("service", "CHAT-SERVER").Logger()
+	log := log.With().Str("service", "chat").Logger()
 	log.Info().Msg("Chat server starter")
 	usernameMaps := make(map[string]int)
 	for {
 		select {
-		case socket := <-chatServer.connected:
-			log.Debug().Str("ip", socket.RemoteAddr().String()).Msg("New client connected")
+		case client := <-chatServer.connected:
+			log.Debug().Uint("peer", client.Id).Msg("New client connected")
 			session := &ChatSession{
-				socket: socket,
+				client: client,
 			}
-			chatServer.sessions[socket] = session
+			chatServer.sessions[client] = session
 			session.writeLine("Please enter your username...")
-		case socket := <-chatServer.disconnected:
-			log.Debug().Str("ip", socket.RemoteAddr().String()).Msg("Client disconnected")
-			session := chatServer.sessions[socket]
-			delete(chatServer.sessions, socket)
+		case client := <-chatServer.disconnected:
+			log.Debug().Uint("peer", client.Id).Msg("Client disconnected")
+			session := chatServer.sessions[client]
+			delete(chatServer.sessions, client)
 			if !session.IsConnected() {
 				break
 			}
@@ -84,10 +84,10 @@ func (chatServer *ChatServer) runChatServer() {
 			}
 		case message := <-chatServer.message:
 			log.Debug().Str("message", message.value).Msg("Received a new chat message")
-			session := chatServer.sessions[message.socket]
+			session := chatServer.sessions[message.client]
 			if session.username == "" {
 				if message.value == "" || !regexp.MustCompile(`^[a-zA-Z0-9]*$`).MatchString(message.value) {
-					session.socket.Close()
+					session.client.Close()
 					break
 				}
 				{
@@ -102,7 +102,7 @@ func (chatServer *ChatServer) runChatServer() {
 				}
 				usernames := []string{}
 				for _, sess := range chatServer.sessions {
-					if session.socket == sess.socket || !sess.IsConnected() {
+					if session.client == sess.client || !sess.IsConnected() {
 						continue
 					}
 					usernames = append(usernames, sess.username)
@@ -113,7 +113,7 @@ func (chatServer *ChatServer) runChatServer() {
 				} else {
 					session.writeLine("* The room is currently empty")
 				}
-				log.Info().Str("ip", session.socket.RemoteAddr().String()).Str("name", session.username).Msg("Client set their name")
+				log.Info().Uint("peer", session.client.Id).Str("name", session.username).Msg("Client set their name")
 				break
 			}
 
@@ -122,42 +122,47 @@ func (chatServer *ChatServer) runChatServer() {
 			}
 
 			for _, sess := range chatServer.sessions {
-				if sess.socket == session.socket || !sess.IsConnected() {
+				if sess.client == session.client || !sess.IsConnected() {
 					continue
 				}
 				sess.writeLine(fmt.Sprintf("[%s] %s", session.username, message.value))
 			}
-			log.Info().Str("ip", session.socket.RemoteAddr().String()).Str("name", session.username).Str("text", message.value).Msg("Client sent new text")
+			log.Info().
+				Uint("peer", session.client.Id).
+				Str("name", session.username).
+				Str("text", message.value).
+				Msg("Client sent new text")
 		}
 	}
 }
 
-func (cs *ChatServer) HandleClient(conn net.Conn) {
-	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
-
+func (cs *ChatServer) HandleClient(c *server.TCPClient) error {
 	defer func() {
-		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
-		conn.Close()
-		cs.disconnected <- conn
+		cs.disconnected <- c
 	}()
 
-	cs.connected <- conn
+	cs.connected <- c
 
-	reader := bufio.NewReader(conn)
+	reader := bufio.NewReader(c)
 	for {
 		text, err := reader.ReadString('\n')
 		if err != nil {
-			return
+			if errors.Is(err, net.ErrClosed) {
+				break
+			}
+			return err
 		}
 
 		cs.message <- struct {
-			socket net.Conn
+			client *server.TCPClient
 			value  string
 		}{
-			socket: conn,
+			client: c,
 			value:  strings.TrimRight(text, "\r\n"),
 		}
 	}
+
+	return nil
 }
 
 func (chatSession *ChatSession) IsConnected() bool {
@@ -166,6 +171,6 @@ func (chatSession *ChatSession) IsConnected() bool {
 
 func (chatSession *ChatSession) writeLine(line string) error {
 	line = strings.TrimRight(line, "\n")
-	_, err := chatSession.socket.Write(fmt.Appendf(nil, "%s\n", line))
+	_, err := chatSession.client.Write(fmt.Appendf(nil, "%s\n", line))
 	return err
 }

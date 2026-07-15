@@ -2,30 +2,22 @@ package smoke_test
 
 import (
 	"io"
-	"net"
 
-	"github.com/rs/zerolog/log"
+	"github.com/wizzymore/tcp-go/server"
 )
 
-func Handler(conn net.Conn) {
-	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
-	defer func() {
-		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
-		conn.Close()
-	}()
-
+func Handler(c *server.TCPClient) error {
 	for {
 		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
+		n, err := c.Read(buf)
 		if err != nil {
 			if err == io.EOF {
-				log.Info().Msg("Client closed the connection")
-				return
+				return nil
 			}
-			log.Err(err).Msg("Client read error")
-			return
+			c.Logger.Err(err).Msg("Client read error")
+			return err
 		}
 
-		conn.Write(buf[:n])
+		c.Write(buf[:n])
 	}
 }

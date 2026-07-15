@@ -16,7 +16,7 @@ import (
 	"github.com/wizzymore/tcp-go/db"
 	"github.com/wizzymore/tcp-go/means"
 	"github.com/wizzymore/tcp-go/mob"
-	primetime "github.com/wizzymore/tcp-go/primetime"
+	"github.com/wizzymore/tcp-go/primetime"
 	"github.com/wizzymore/tcp-go/server"
 	"github.com/wizzymore/tcp-go/smoke_test"
 )

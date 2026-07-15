@@ -6,9 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 
-	"github.com/rs/zerolog/log"
+	"github.com/wizzymore/tcp-go/server"
 )
 
 type step_one_request struct {
@@ -62,33 +61,26 @@ func isPrime(n int) bool {
 	return true
 }
 
-func Handler(conn net.Conn) {
-	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
-	defer func() {
-		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")
-		conn.Close()
-	}()
-
-	reader := bufio.NewReader(conn)
-	writer := newWriter(conn)
+func Handler(c *server.TCPClient) error {
+	reader := bufio.NewReader(c)
+	writer := newWriter(c)
 	for {
 		out, err := reader.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
-				log.Info().Msg("client closed the connection")
 				break
 			}
-			log.Err(err).Msg("client read error")
-			break
+			return err
 		}
-		log.Info().Msgf("got new data %s", out)
+		c.Logger.Info().Msgf("got new data %s", out)
 
 		if err := handle_step_one(writer, out); err != nil {
-			log.Err(err).Msg("could not handle received input")
-			conn.Write([]byte("bye, bye\n"))
-			return
+			c.Write([]byte("bye, bye\n"))
+			return err
 		}
 	}
+
+	return nil
 }
 
 type NewLineWriter struct {
