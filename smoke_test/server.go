@@ -1,4 +1,4 @@
-package main
+package smoke_test
 
 import (
 	"io"
@@ -7,7 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func step_zero(conn net.Conn) {
+func Handler(conn net.Conn) {
 	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
 	defer func() {
 		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")

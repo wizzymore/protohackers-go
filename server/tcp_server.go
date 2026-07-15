@@ -6,28 +6,29 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type Handler func(conn net.Conn)
+type ServerHandle func(conn net.Conn)
 
-type IServer interface {
+type Server interface {
 	Start()
 	Stop() error
 }
 
-type Server struct {
+type TCPServer struct {
 	Running          bool
 	Listener         net.Listener
-	handleConnection Handler
+	handleConnection ServerHandle
 }
 
-func NewServer(handler Handler) (s *Server, err error) {
-	s = &Server{}
-	s.Listener, err = net.Listen("tcp", ":8081")
+func NewTCPServer(handler ServerHandle) (s *TCPServer, err error) {
+	s = &TCPServer{}
+	s.Listener, err = net.Listen("tcp", ":8000")
 	s.handleConnection = handler
 	return
 }
 
-func (s *Server) Start() {
-	log.Info().Msgf("Server started on port %d", s.Listener.Addr().(*net.TCPAddr).Port)
+func (s *TCPServer) Start() {
+	addr := s.Listener.Addr()
+	log.Info().Msgf("Server started on %s", addr.String())
 	for {
 		conn, err := s.Listener.Accept()
 		if err != nil {
@@ -44,7 +45,7 @@ func (s *Server) Start() {
 	}
 }
 
-func (s *Server) Stop() error {
+func (s *TCPServer) Stop() error {
 	s.Running = false
 	if err := s.Listener.Close(); err != nil {
 		return err

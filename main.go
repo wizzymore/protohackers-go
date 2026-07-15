@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"os/signal"
 	"slices"
@@ -13,8 +14,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/chat"
 	"github.com/wizzymore/tcp-go/db"
+	"github.com/wizzymore/tcp-go/means"
 	"github.com/wizzymore/tcp-go/mob"
+	primetime "github.com/wizzymore/tcp-go/primetime"
 	"github.com/wizzymore/tcp-go/server"
+	"github.com/wizzymore/tcp-go/smoke_test"
 )
 
 var logLevelFlag = flag.Int("log", int(zerolog.DebugLevel), "Set the log level: 0=debug, 1=info, 2=warn, 3=error, 4=fatal, 5=panic")
@@ -28,24 +32,19 @@ func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *colorFlag})
 }
 
-type ServerFunc func() (server.IServer, error)
+type ServerFunc func() (server.Server, error)
 
 var servers = map[string]ServerFunc{
-	"mob":        func() (server.IServer, error) { return mob.NewMobServer() },
-	"db":         db.NewDbServer,
+	"mob":        func() (server.Server, error) { return mob.NewMobServer() },
+	"db":         func() (server.Server, error) { return db.NewDbServer(false) },
 	"chat":       chat.NewChatServer,
-	"test":       func() (server.IServer, error) { return server.NewServer(step_zero) },
-	"prime-time": func() (server.IServer, error) { return server.NewServer(step_one) },
-	"means":      func() (server.IServer, error) { return server.NewServer(step_two) },
+	"test":       func() (server.Server, error) { return server.NewTCPServer(smoke_test.Handler) },
+	"prime-time": func() (server.Server, error) { return server.NewTCPServer(primetime.Handler) },
+	"means":      func() (server.Server, error) { return server.NewTCPServer(means.Handler) },
 }
 
 func serversList() string {
-	var result []string
-	for key := range servers {
-		result = append(result, key)
-	}
-	slices.Sort(result)
-	return strings.Join(result, ", ")
+	return strings.Join(slices.Sorted(maps.Keys(servers)), ", ")
 }
 
 func main() {
@@ -55,7 +54,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var s server.IServer
+	var s server.Server
 	var err error
 
 	if serverFunc, ok := servers[command]; ok {

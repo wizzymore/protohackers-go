@@ -2,30 +2,31 @@ package db_test
 
 import (
 	"bufio"
-	"bytes"
-	"math/rand"
+	"crypto/rand"
+	"math/big"
+	mathrand "math/rand"
 	"net"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wizzymore/tcp-go/db"
 )
 
 func init() {
-	log.Logger = zerolog.New(&bytes.Buffer{})
-	s, _ := db.NewDbServer()
+	s, err := db.NewDbServer(false, "127.0.0.1:8000")
+	if err != nil {
+		panic(err)
+	}
 	s.Start()
 }
 
 func TestCanSetValue(t *testing.T) {
-	conn, err := net.Dial("udp", "localhost:8081")
+	conn, err := net.Dial("udp", ":8000")
 	if err != nil {
-		t.Error("Could not dial", err)
+		t.Error(err, "could not dial the server")
 		return
 	}
 	conn.Write([]byte("foo=123"))
@@ -39,12 +40,12 @@ func TestCanSetValue(t *testing.T) {
 }
 
 func TestCanReadUnsetValue(t *testing.T) {
-	conn, err := net.Dial("udp", "localhost:8081")
+	conn, err := net.Dial("udp", ":8000")
 	if err != nil {
-		t.Error("Could not dial", err)
+		t.Error(err, "could not dial the server")
 		return
 	}
-	rand_num := strconv.Itoa(rand.Int())
+	rand_num := strconv.Itoa(mathrand.Int())
 	conn.Write([]byte(rand_num))
 	scanner := bufio.NewScanner(conn)
 
@@ -55,9 +56,9 @@ func TestCanReadUnsetValue(t *testing.T) {
 }
 
 func TestCantChangeVersion(t *testing.T) {
-	conn, err := net.Dial("udp", "localhost:8081")
+	conn, err := net.Dial("udp", ":8000")
 	if err != nil {
-		t.Error("Could not dial", err)
+		t.Error(err, "could not dial the server")
 		return
 	}
 	conn.Write([]byte("version=123"))
@@ -68,4 +69,22 @@ func TestCantChangeVersion(t *testing.T) {
 
 	assert.NotEqual(t, "version=123", scanner.Text(), "Did not set value correctly")
 	assert.Equal(t, "version=alpha", scanner.Text(), "Did not set value correctly")
+}
+
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// GenerateRandomString creates a cryptographically secure random string
+func GenerateRandomString(length int) (string, error) {
+	b := make([]byte, length)
+	charsetLength := big.NewInt(int64(len(charset)))
+
+	for i := range b {
+		num, err := rand.Int(rand.Reader, charsetLength)
+		if err != nil {
+			return "", err
+		}
+		b[i] = charset[num.Int64()]
+	}
+
+	return string(b), nil
 }

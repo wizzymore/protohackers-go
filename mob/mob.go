@@ -16,18 +16,18 @@ import (
 const BOGUS string = "7YWHMfk9JZe0LM0g1ZauHuiSxhI"
 
 type MobServer struct {
-	server       *server.Server
+	server       *server.TCPServer
 	proxyAddress string
 }
 
-func NewMobServer(proxyAddress ...string) (s server.IServer, err error) {
+func NewMobServer(proxyAddress ...string) (s server.Server, err error) {
 	mob := &MobServer{}
 	if len(proxyAddress) == 0 {
 		mob.proxyAddress = "chat.protohackers.com:16963"
 	} else {
 		mob.proxyAddress = proxyAddress[0]
 	}
-	mob.server, err = server.NewServer(mob.HandleClient)
+	mob.server, err = server.NewTCPServer(mob.HandleClient)
 	return mob, err
 }
 

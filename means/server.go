@@ -1,4 +1,4 @@
-package main
+package means
 
 import (
 	"encoding/binary"
@@ -16,7 +16,7 @@ type StepTwoData struct {
 	price     int32
 }
 
-func step_two(conn net.Conn) {
+func Handler(conn net.Conn) {
 	log := log.With().Str("remote_addr", conn.RemoteAddr().String()).Logger()
 	defer func() {
 		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msg("Closing connection")

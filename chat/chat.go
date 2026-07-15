@@ -19,7 +19,7 @@ type ChatSession struct {
 }
 
 type ChatServer struct {
-	server   *server.Server
+	server   *server.TCPServer
 	sessions map[net.Conn]*ChatSession
 
 	connected    chan net.Conn
@@ -30,9 +30,9 @@ type ChatServer struct {
 	}
 }
 
-func NewChatServer() (s server.IServer, err error) {
+func NewChatServer() (s server.Server, err error) {
 	cs := &ChatServer{}
-	cs.server, err = server.NewServer(cs.HandleClient)
+	cs.server, err = server.NewTCPServer(cs.HandleClient)
 	cs.sessions = make(map[net.Conn]*ChatSession)
 	cs.connected = make(chan net.Conn)
 	cs.disconnected = make(chan net.Conn)
