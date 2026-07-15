@@ -2,7 +2,6 @@ package reader
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
 )
 
@@ -26,7 +25,7 @@ func ReadString(r io.Reader, dest *string, byteOrder ...binary.ByteOrder) error 
 		bb = append(bb, b)
 
 		if err := binary.Read(r, bo, &b); err != nil {
-			return fmt.Errorf("wow.ReadString: %w", err)
+			return err
 		}
 	}
 
@@ -45,7 +44,7 @@ func ReadStringFixed(r io.Reader, dest *string, length int, byteOrder ...binary.
 	bb := make([]byte, length)
 
 	if err := binary.Read(r, bo, &bb); err != nil {
-		return fmt.Errorf("wow.ReadStringFixed: %w", err)
+		return err
 	}
 
 	*dest = string(bb)
@@ -85,7 +84,7 @@ func ReadN(r io.Reader, n int) ([]byte, error) {
 
 	n2, err := r.Read(buf)
 	if err != nil {
-		return buf, fmt.Errorf("wow.ReadBytes: %w", err)
+		return buf, err
 	}
 
 	if n2 != n {
@@ -102,7 +101,7 @@ func SkipN(r io.Reader, n int) (int, error) {
 
 	n2, err := r.Read(buf)
 	if err != nil {
-		return n2, fmt.Errorf("wow.ReadBytes: %w", err)
+		return n2, err
 	}
 
 	if n2 != n {

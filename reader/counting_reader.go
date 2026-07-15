@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-
-	"github.com/rs/zerolog/log"
 )
 
 type CountingReader struct {
@@ -42,7 +40,7 @@ func (cr *CountingReader) ReadString(dest *string, byteOrder ...binary.ByteOrder
 		bb = append(bb, b)
 
 		if err := binary.Read(cr, binary.LittleEndian, &b); err != nil {
-			return fmt.Errorf("wow.ReadString: %w", err)
+			return err
 		}
 	}
 
@@ -61,7 +59,7 @@ func (cr *CountingReader) ReadStringFixed(dest *string, length int, byteOrder ..
 	bb := make([]byte, length)
 
 	if err := binary.Read(cr, bo, &bb); err != nil {
-		return fmt.Errorf("wow.ReadStringFixed: %w", err)
+		return err
 	}
 
 	*dest = string(bb)
@@ -98,13 +96,11 @@ func (cr *CountingReader) ReadN(n int) ([]byte, error) {
 
 	n2, err := cr.ReadBytes(buf)
 	if err != nil {
-		return buf, fmt.Errorf("wow.ReadBytes: %w", err)
+		return buf, err
 	}
 
 	if n2 != n {
-		log.Warn().Err(err).Msgf("readed %d instead of required: %d", n2, n)
-
-		return buf, io.ErrUnexpectedEOF
+		return buf, fmt.Errorf("read %d instead of required %d", n2, n)
 	}
 
 	return buf, nil
@@ -121,9 +117,7 @@ func (cr *CountingReader) SkipN(n int) (int, error) {
 	}
 
 	if n2 != n {
-		log.Warn().Err(err).Msgf("skipped %d instead of required: %d", n2, n)
-
-		return n2, io.ErrUnexpectedEOF
+		return n2, fmt.Errorf("skipped %d instead of required: %d", n2, n)
 	}
 
 	return n2, nil
@@ -138,7 +132,7 @@ func (cr *CountingReader) ReadReverseBytes(n int) []byte {
 
 	err := cr.ReadB(buf)
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		panic(err)
 	}
 
 	return ReverseBytes(buf)
