@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"regexp"
 	"strings"
@@ -170,7 +171,20 @@ func (chatSession *ChatSession) IsConnected() bool {
 }
 
 func (chatSession *ChatSession) writeLine(line string) error {
-	line = strings.TrimRight(line, "\n")
-	_, err := chatSession.client.Write(fmt.Appendf(nil, "%s\n", line))
-	return err
+	data := []byte(line)
+	if line[len(line)-1] != '\n' {
+		data = append(data, '\n')
+	}
+
+	n, err := chatSession.client.Write(data)
+
+	if err != nil {
+		return err
+	}
+
+	if n != len(data) {
+		return io.ErrUnexpectedEOF
+	}
+
+	return nil
 }
