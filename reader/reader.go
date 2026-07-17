@@ -52,10 +52,10 @@ func ReadStringFixed(r io.Reader, dest *string, length int, byteOrder ...binary.
 	return nil
 }
 
-func ReadByte(r io.Reader) (uint8, error) {
+func ReadByte(r io.Reader) (byte, error) {
 	buf, err := ReadN(r, 1)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 
 	return buf[0], nil
