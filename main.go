@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/wizzymore/tcp-go/chat"
 	"github.com/wizzymore/tcp-go/db"
+	"github.com/wizzymore/tcp-go/jobcentre"
 	"github.com/wizzymore/tcp-go/means"
 	"github.com/wizzymore/tcp-go/mob"
 	"github.com/wizzymore/tcp-go/primetime"
@@ -41,6 +42,7 @@ var servers = map[string]ServerFunc{
 	"prime-time": func() (server.Server, error) { return server.NewTCPServer(primetime.Handler) },
 	"means":      func() (server.Server, error) { return server.NewTCPServer(means.Handler) },
 	"traffic":    traffic.NewTrafficServer,
+	"jobs":       jobcentre.NewJobCentreServer,
 }
 
 func serversList() string {
@@ -55,7 +57,7 @@ func main() {
 	}
 	defer logFile.Close()
 	multiWriter := zerolog.MultiLevelWriter(
-		zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *colorFlag},
+		zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *colorFlag, TimeFormat: "15:04:05"},
 		logFile,
 	)
 	log.Logger = log.Output(multiWriter)
@@ -75,7 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err != nil {
-		log.Error().Err(err).Msg("Error creating server")
+		log.Error().Err(err).Msg("error creating server")
 		return
 	}
 
@@ -87,7 +89,7 @@ func main() {
 	// Handle interrupt signal
 	go func() {
 		<-sigCh
-		log.Info().Msg("Received interrupt signal")
+		log.Info().Msg("received interrupt signal")
 		doneCh <- struct{}{}
 	}()
 
@@ -95,10 +97,10 @@ func main() {
 
 	<-doneCh
 
-	log.Info().Msg("Shutting down server...")
+	log.Info().Msg("shutting down server...")
 	if err := s.Stop(); err != nil {
-		log.Error().Err(err).Msg("Error stopping server")
+		log.Error().Err(err).Msg("error stopping server")
 	} else {
-		log.Info().Msg("Server stopped")
+		log.Info().Msg("server stopped")
 	}
 }

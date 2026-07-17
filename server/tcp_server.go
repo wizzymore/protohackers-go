@@ -32,7 +32,7 @@ func NewTCPServer(handler TCPHandle) (s *TCPServer, err error) {
 
 func (s *TCPServer) Start() {
 	addr := s.Listener.Addr()
-	log.Info().Msgf("Server started on %s", addr.String())
+	log.Info().Msgf("server started on %s", addr.String())
 	var nextId uint = 1
 	for {
 		conn, err := s.Listener.Accept()
@@ -40,10 +40,10 @@ func (s *TCPServer) Start() {
 			if errors.Is(err, net.ErrClosed) {
 				return
 			}
-			log.Fatal().Err(err).Msg("Error accepting connection")
+			log.Fatal().Err(err).Msg("error accepting connection")
 		}
 
-		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msgf("Accepted connection from %s", conn.RemoteAddr())
+		log.Info().Str("remote_addr", conn.RemoteAddr().String()).Msgf("accepted connection from %s", conn.RemoteAddr())
 		id := nextId
 		nextId += 1
 		go func(conn net.Conn, id uint) {
@@ -53,7 +53,7 @@ func (s *TCPServer) Start() {
 			err := s.handleConnection(c)
 			if err != nil && !errors.Is(err, net.ErrClosed) {
 				if errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET) {
-					c.Logger.Info().Err(err).Msg("client closed the connection")
+					c.Logger.Info().Msg("client closed the connection")
 				} else {
 					c.Logger.Err(err).Msg("client did not handle ok")
 				}
