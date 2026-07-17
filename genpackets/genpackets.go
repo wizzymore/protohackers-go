@@ -115,111 +115,91 @@ package {{.package}}
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
+
+	"github.com/wizzymore/tcp-go/reader"
 )
 {{range .structs}}
-func (p *{{.Name}}) Marshal(opCode byte) []byte {
-	b := bytes.Buffer{}
-	_ = b.WriteByte(opCode)
+func (p *{{.Name}}) Marshal() (b []byte, err error) {
+	buff := bytes.Buffer{}
+	err = buff.WriteByte(p.Opcode())
+	if err != nil {
+		return
+	}
 {{range .Fields}}
 	{{- if eq .Type "string"}}
-	_ = b.WriteByte(byte(len(p.{{.Name}})))
-	_, _ = b.WriteString(p.{{.Name}})
-	{{- else if eq .Type "[]uint16"}}
-	_ = b.WriteByte(byte(len(p.{{.Name}})))
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	{{- else if eq .Type "int64"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	{{- else if eq .Type "int32"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	{{- else if eq .Type "int16"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	p.{{.Name}} = v
-	{{- else if eq .Type "int8"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	{{- else if eq .Type "uint64"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	{{- else if eq .Type "uint32"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	{{- else if eq .Type "uint16"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
-	{{- else if eq .Type "uint8"}}
-	_ = binary.Write(&b, binary.BigEndian, p.{{.Name}})
+	err = buff.WriteByte(byte(len(p.{{.Name}})))
+	if err != nil {
+		return
+	}
+	n, err := buff.WriteString(p.{{.Name}})
+	if err != nil {
+		return
+	}
+	if n != len(p.{{.Name}}) {
+		err = io.ErrUnexpectedEOF
+		return
+	}
+	{{- else if or (eq .Type "[]int64") (eq .Type "[]int32") (eq .Type "[]int16") (eq .Type "[]int8") (eq .Type "[]uint64") (eq .Type "[]uint32") (eq .Type "[]uint16") (eq .Type "[]uint8")}}
+	err = buff.WriteByte(byte(len(p.{{.Name}})))
+	if err != nil {
+		return
+	}
+	err = binary.Write(&buff, binary.BigEndian, p.{{.Name}})
+	if err != nil {
+		return
+	}
+	{{- else if or (eq .Type "int64") (eq .Type "int32") (eq .Type "int16") (eq .Type "int8") (eq .Type "uint64") (eq .Type "uint32") (eq .Type "uint16") (eq .Type "uint8")}}
+	err = binary.Write(&buff, binary.BigEndian, p.{{.Name}})
+	if err != nil {
+		return
+	}
 	{{- else}}
 	panic("Provided unsupported type {{.Type}} for {{.Name}}")
 	{{- end}}
 {{end}}
-	return b.Bytes()
+	b = buff.Bytes()
+	return
 }
 
-func (p *{{.Name}}) Unmarshal(r io.Reader) error {
+func (p *{{.Name}}) Unmarshal(r io.Reader) (err error) {
 {{range .Fields}} {{- if eq .Type "string"}}
 	{
-		var lengthByte [1]byte
-		if _, err := r.Read(lengthByte[:]); err != nil {
-			return fmt.Errorf("Could not read string length for {{.Name}}: %w", err)
+		var length byte
+		length, err = reader.ReadByte(r)
+		if err != nil {
+			return
 		}
-		length := int(lengthByte[0])
-		buf := make([]byte, length)
-		if _, err := io.ReadFull(r, buf); err != nil {
-			return fmt.Errorf("Could not read string value for {{.Name}}: %w", err)
+		var buf []byte
+		buf, err = reader.ReadN(r, int(length))
+		if err != nil {
+			return
 		}
 		p.{{.Name}} = string(buf)
 	}
-	{{- else if eq .Type "[]uint16" }}
+	{{- else if or (eq .Type "[]int64") (eq .Type "[]int32") (eq .Type "[]int16") (eq .Type "[]int8") (eq .Type "[]uint64") (eq .Type "[]uint32") (eq .Type "[]uint16") (eq .Type "[]uint8")}}
 	{
-		var lengthByte [1]byte
-		if _, err := r.Read(lengthByte[:]); err != nil {
-			return fmt.Errorf("Could not read slice length for {{.Name}}: %w", err)
+		var length byte
+		length, err = reader.ReadByte(r)
+		if err != nil {
+			return
 		}
-		length := int(lengthByte[0])
 		buf := make([]uint16, length)
-		for i := range buf {
-			if err := binary.Read(r, binary.BigEndian, &buf[i]); err != nil {
-				return fmt.Errorf("Could not read uint16 for {{.Name}}: %w", err)
-			}
+		err = reader.ReadB(r, buf)
+		if err != nil {
+			return
 		}
 		p.{{.Name}} = buf
 	}
-	{{- else if eq .Type "int64"}}
-	if err := binary.Read(r, binary.BigEndian, &p.{{.Name}}); err != nil {
-		return fmt.Errorf("Could not read int64 for {{.Name}}: %w", err)
-	}
-	{{- else if eq .Type "int32"}}
-	if err := binary.Read(r, binary.BigEndian, &p.{{.Name}}); err != nil {
-		return fmt.Errorf("Could not read int32 for {{.Name}}: %w", err)
-	}
-	{{- else if eq .Type "int16"}}
-	var v int16
-	if err := binary.Read(r, binary.BigEndian, &v); err != nil {
-		return fmt.Errorf("Could not read int16 for {{.Name}}: %w", err)
-	}
-	p.{{.Name}} = v
-	{{- else if eq .Type "int8"}}
-	if err := binary.Read(r, binary.BigEndian, &p.{{.Name}}); err != nil {
-		return fmt.Errorf("Could not read int8 for {{.Name}}: %w", err)
-	}
-	{{- else if eq .Type "uint64"}}
-	if err := binary.Read(r, binary.BigEndian, &p.{{.Name}}); err != nil {
-		return fmt.Errorf("Could not read uint64 for {{.Name}}: %w", err)
-	}
-	{{- else if eq .Type "uint32"}}
-	if err := binary.Read(r, binary.BigEndian, &p.{{.Name}}); err != nil {
-		return fmt.Errorf("Could not read uint32 for {{.Name}}: %w", err)
-	}
-	{{- else if eq .Type "uint16"}}
-	if err := binary.Read(r, binary.BigEndian, &p.{{.Name}}); err != nil {
-		return fmt.Errorf("Could not read uint16 for {{.Name}}: %w", err)
-	}
-	{{- else if eq .Type "uint8"}}
-	if err := binary.Read(r, binary.BigEndian, &p.{{.Name}}); err != nil {
-		return fmt.Errorf("Could not read uint8 for {{.Name}}: %w", err)
+	{{- else if or (eq .Type "int64") (eq .Type "int32") (eq .Type "int16") (eq .Type "int8") (eq .Type "uint64") (eq .Type "uint32") (eq .Type "uint16") (eq .Type "uint8")}}
+	err = reader.ReadB(r, &p.{{.Name}})
+	if err != nil {
+		return
 	}
 	{{- else}}
 	panic("Provided unsupported type {{.Type}} for {{.Name}}")
 	{{- end}}
 {{end}}
-	return nil
+	return
 }
 {{end}}`))

@@ -2,26 +2,50 @@
 
 package traffic
 
-type Camera struct {
-	Road  uint16
-	Mile  uint16
-	limit uint16
+import "io"
+
+type Packet interface {
+	Marshal() (b []byte, err error)
+	Unmarshal(r io.Reader) (err error)
+	Opcode() byte
 }
 
-type Dispatcher struct {
+type IAmCameraPacket struct {
+	Road  uint16
+	Mile  uint16
+	Limit uint16
+}
+
+func (self *IAmCameraPacket) Opcode() byte {
+	return 0x80
+}
+
+type IAmDispatcherPacket struct {
 	Roads []uint16
 }
 
-type Error struct {
+func (self *IAmDispatcherPacket) Opcode() byte {
+	return 0x81
+}
+
+type ErrorPacket struct {
 	Message string
 }
 
-type Plate struct {
+func (self *ErrorPacket) Opcode() byte {
+	return 0x10
+}
+
+type PlatePacket struct {
 	Plate     string
 	Timestamp uint32
 }
 
-type Ticket struct {
+func (self *PlatePacket) Opcode() byte {
+	return 0x20
+}
+
+type TicketPacket struct {
 	Plate      string
 	Road       uint16
 	Mile1      uint16
@@ -31,9 +55,21 @@ type Ticket struct {
 	Speed      uint16 // 100x Miles per hour
 }
 
-type WantHeartbeat struct {
+func (self *TicketPacket) Opcode() byte {
+	return 0x21
+}
+
+type WantHeartbeatPacket struct {
 	Interval uint32
 }
 
-type Heartbeat struct {
+func (self *WantHeartbeatPacket) Opcode() byte {
+	return 0x40
+}
+
+type HeartbeatPacket struct {
+}
+
+func (self *HeartbeatPacket) Opcode() byte {
+	return 0x41
 }
