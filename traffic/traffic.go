@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -16,7 +15,6 @@ import (
 	"github.com/wizzymore/tcp-go/server"
 )
 
-type peerId uint
 type connected struct{}
 type disconnected struct{}
 
@@ -157,7 +155,7 @@ func (self *TrafficServer) handlingServer() {
 	cameras := make(map[PeerId]*IAmCameraPacket)
 	plateReadings := make(map[Plate][]*PlateInfo)
 	dispatchers := make(map[PeerId]*IAmDispatcherPacket)
-	road_dispatchers := make(map[uint16][]PeerId)
+	road_dispatchers := make(map[uint16]*Balancer[PeerId])
 	tickets := make(map[RoadId][]*TicketPacket)
 
 	// This stores tags to plates ticketed on specific days so we don't ticket twice
@@ -221,7 +219,12 @@ func (self *TrafficServer) handlingServer() {
 					dispatchers[message.client.Id] = p
 
 					for _, road := range p.Roads {
-						road_dispatchers[road] = append(road_dispatchers[road], message.client.Id)
+						balancer := road_dispatchers[road]
+						if balancer == nil {
+							balancer = NewBalancer[PeerId]()
+							road_dispatchers[road] = balancer
+						}
+						balancer.Add(message.client.Id)
 
 						t, ok := tickets[road]
 						if !ok || len(t) == 0 {
@@ -366,8 +369,13 @@ func (self *TrafficServer) handlingServer() {
 							}
 
 							rd, ok := road_dispatchers[current.Road]
+							var dispatcher PeerId
 
-							if !ok || len(rd) == 0 {
+							if ok {
+								dispatcher, ok = rd.Get()
+							}
+
+							if !ok {
 								// No dispatchers currently online for that road, queue it for later
 								tickets[current.Road] = append(tickets[current.Road], ticket)
 								log.Debug().
@@ -378,7 +386,6 @@ func (self *TrafficServer) handlingServer() {
 									Float32("speed", speed).
 									Msg("no dispatcher available to send ticket, put in queue")
 							} else {
-								dispatcher := rd[rand.Intn(len(rd))]
 								_ = sendTicket(clients[dispatcher], ticket, prevDay)
 							}
 
@@ -404,16 +411,9 @@ func (self *TrafficServer) handlingServer() {
 				if _, ok := dispatchers[message.client.Id]; ok {
 					delete(dispatchers, message.client.Id)
 					for road, dispatchers := range road_dispatchers {
-						for i := 0; i < len(dispatchers); i++ {
-							if dispatchers[i] == message.client.Id {
-								dispatchers = append(dispatchers[:i], dispatchers[i+1:]...)
-
-								if len(dispatchers) == 0 {
-									delete(road_dispatchers, road)
-								} else {
-									road_dispatchers[road] = dispatchers
-								}
-							}
+						dispatchers.Remove(message.client.Id)
+						if dispatchers.Len() == 0 {
+							delete(road_dispatchers, road)
 						}
 					}
 				}
