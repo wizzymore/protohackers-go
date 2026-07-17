@@ -8,7 +8,6 @@ import (
 	"math"
 	"math/rand"
 	"net"
-	"slices"
 	"sync"
 	"time"
 
@@ -94,18 +93,27 @@ func (self *TrafficServer) HandleClient(client *server.TCPClient) (err error) {
 			packet = new(IAmCameraPacket)
 			err = packet.Unmarshal(client.Conn)
 			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return
+				}
 				return errors.Join(err, errors.New("could not unmarshal camera packet"))
 			}
 		case (*IAmDispatcherPacket).Opcode(nil):
 			packet = new(IAmDispatcherPacket)
 			err = packet.Unmarshal(client.Conn)
 			if err != nil {
-				return errors.Join(err, errors.New("could not unmarshal camera packet"))
+				if errors.Is(err, io.EOF) {
+					return
+				}
+				return errors.Join(err, errors.New("could not unmarshal dispatcher packet"))
 			}
 		case (*WantHeartbeatPacket).Opcode(nil):
 			packet = new(WantHeartbeatPacket)
 			err = packet.Unmarshal(client.Conn)
 			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return
+				}
 				return errors.Join(err, errors.New("could not unmarshal want heartbeat packet"))
 			}
 		default:
@@ -136,17 +144,24 @@ type PlateInfo struct {
 	Mile      uint16
 }
 
+type PeerId = uint
+type Plate = string
+type RoadId = uint16
+type Day = int
+
 func (self *TrafficServer) handlingServer() {
 	defer self.wg.Done()
 
-	clients := make(map[uint]*server.TCPClient)
-	heartbeats := make(map[uint]context.CancelFunc)
-	cameras := make(map[uint]*IAmCameraPacket)
-	dispatchers := make(map[uint]*IAmDispatcherPacket)
-	plates := make(map[string][]*PlateInfo)
-	road_dispatchers := make(map[uint16][]uint)
-	tickets := make(map[uint16][]*TicketPacket)
-	day_plates := make(map[int][]string)
+	clients := make(map[PeerId]*server.TCPClient)
+	heartbeats := make(map[PeerId]context.CancelFunc)
+	cameras := make(map[PeerId]*IAmCameraPacket)
+	plateReadings := make(map[Plate][]*PlateInfo)
+	dispatchers := make(map[PeerId]*IAmDispatcherPacket)
+	road_dispatchers := make(map[uint16][]PeerId)
+	tickets := make(map[RoadId][]*TicketPacket)
+
+	// This stores tags to plates ticketed on specific days so we don't ticket twice
+	dayPlates := make(map[Day]map[Plate]struct{})
 
 	for {
 		select {
@@ -206,7 +221,6 @@ func (self *TrafficServer) handlingServer() {
 					dispatchers[message.client.Id] = p
 
 					for _, road := range p.Roads {
-						// This is the idiomatic and efficient way in Go
 						road_dispatchers[road] = append(road_dispatchers[road], message.client.Id)
 
 						t, ok := tickets[road]
@@ -236,28 +250,32 @@ func (self *TrafficServer) handlingServer() {
 						Int("day", newPacketDay).
 						Msg("received a new plate")
 
+					{
+						// If we already send a ticket to this plate on this day, stop here
+						// we can't ticket a plate twice in a specific day
+						dp, ok := dayPlates[newPacketDay]
+						if ok {
+							if _, ok := dp[p.Plate]; ok {
+								continue
+							}
+						}
+					}
+
 					plateInfo := &PlateInfo{
 						Plate:     p.Plate,
 						Timestamp: p.Timestamp,
 						Road:      camera.Road,
 						Mile:      camera.Mile,
 					}
-					plates[p.Plate] = append(plates[p.Plate], plateInfo)
+
+					plateReadings[p.Plate] = append(plateReadings[p.Plate], plateInfo)
 
 					// Ticket checking
-					sightings := plates[p.Plate]
+					sightings := plateReadings[p.Plate]
 
 					// Not enough data to send a ticket
 					if len(sightings) < 2 {
 						continue
-					}
-
-					{
-						// If we already send a ticket for the latest packet's day, just stop here
-						dp, ok := day_plates[newPacketDay]
-						if ok && slices.Contains(dp, p.Plate) {
-							continue
-						}
 					}
 
 					var current *PlateInfo
@@ -265,6 +283,7 @@ func (self *TrafficServer) handlingServer() {
 					var distance uint32
 					var prevDay int
 					var currentDay int
+
 					for i := 0; i < len(sightings)-1; i++ {
 						loopPacket := sightings[i]
 
@@ -284,10 +303,12 @@ func (self *TrafficServer) handlingServer() {
 						{
 							didReceiveTicket := false
 							for i := prevDay; i <= currentDay; i++ {
-								p, ok := day_plates[i]
-								if ok && slices.Contains(p, current.Plate) {
-									didReceiveTicket = true
-									break
+								p, ok := dayPlates[i]
+								if ok {
+									if _, ok := p[current.Plate]; ok {
+										didReceiveTicket = true
+										break
+									}
 								}
 							}
 
@@ -338,7 +359,10 @@ func (self *TrafficServer) handlingServer() {
 									Uint16("limit", camera.Limit).
 									Float32("speed", speed).
 									Msg("set ticket a sent for day")
-								day_plates[j] = append(day_plates[j], current.Plate)
+								if dayPlates[j] == nil {
+									dayPlates[j] = make(map[Plate]struct{})
+								}
+								dayPlates[j][current.Plate] = struct{}{}
 							}
 
 							rd, ok := road_dispatchers[current.Road]
@@ -358,10 +382,20 @@ func (self *TrafficServer) handlingServer() {
 								_ = sendTicket(clients[dispatcher], ticket, prevDay)
 							}
 
-							// Remove prev and current
-							plates[loopPacket.Plate] = append(sightings[:i], sightings[i+1:len(sightings)-1]...)
+							break
 						}
 					}
+
+					// We must clean all the plate readings and remove all of them which are on days that received a ticket
+					readings := plateReadings[p.Plate]
+					for i := 0; i < len(readings); i++ {
+						reading := readings[i]
+						day := int(math.Floor(float64(reading.Timestamp) / 86400))
+						if _, ok := dayPlates[day][reading.Plate]; ok {
+							readings = append(readings[:i], readings[i+1:]...)
+						}
+					}
+					plateReadings[p.Plate] = readings
 				}
 			case connected:
 				clients[message.client.Id] = message.client
