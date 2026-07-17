@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"syscall"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -50,9 +51,9 @@ func (s *TCPServer) Start() {
 			defer c.Close()
 			c.Logger.Info().Msg("connected")
 			err := s.handleConnection(c)
-			if err != nil && errors.Is(err, net.ErrClosed) {
-				if errors.Is(err, io.EOF) {
-					c.Logger.Info().Msg("client closed the connection")
+			if err != nil && !errors.Is(err, net.ErrClosed) {
+				if errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET) {
+					c.Logger.Info().Err(err).Msg("client closed the connection")
 				} else {
 					c.Logger.Err(err).Msg("client did not handle ok")
 				}

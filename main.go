@@ -19,6 +19,7 @@ import (
 	"github.com/wizzymore/tcp-go/primetime"
 	"github.com/wizzymore/tcp-go/server"
 	"github.com/wizzymore/tcp-go/smoke_test"
+	"github.com/wizzymore/tcp-go/traffic"
 )
 
 var logLevelFlag = flag.Int("log", int(zerolog.DebugLevel), "Set the log level: 0=debug, 1=info, 2=warn, 3=error, 4=fatal, 5=panic")
@@ -28,8 +29,6 @@ func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	flag.Parse()
 	zerolog.SetGlobalLevel(zerolog.Level(*logLevelFlag))
-
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *colorFlag})
 }
 
 type ServerFunc func() (server.Server, error)
@@ -41,6 +40,7 @@ var servers = map[string]ServerFunc{
 	"test":       func() (server.Server, error) { return server.NewTCPServer(smoke_test.Handler) },
 	"prime-time": func() (server.Server, error) { return server.NewTCPServer(primetime.Handler) },
 	"means":      func() (server.Server, error) { return server.NewTCPServer(means.Handler) },
+	"traffic":    traffic.NewTrafficServer,
 }
 
 func serversList() string {
@@ -48,6 +48,18 @@ func serversList() string {
 }
 
 func main() {
+	// Open log file
+	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer logFile.Close()
+	multiWriter := zerolog.MultiLevelWriter(
+		zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *colorFlag},
+		logFile,
+	)
+	log.Logger = log.Output(multiWriter)
+
 	command := strings.Join(flag.Args(), " ")
 	if command == "" {
 		fmt.Printf("No command provided. Valid commands: [%s]\n", serversList())
@@ -55,7 +67,6 @@ func main() {
 	}
 
 	var s server.Server
-	var err error
 
 	if serverFunc, ok := servers[command]; ok {
 		s, err = serverFunc()
